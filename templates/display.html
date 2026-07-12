@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>AWS Students Builder — CUUT UAEMex</title>
+<style>
+  :root {
+    --aws-dark: #161e2d;
+    --aws-navy: #232f3e;
+    --aws-orange: #ff9900;
+    --uaemex-green: #0b6e4f;
+    --uaemex-gold: #d4af37;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: radial-gradient(ellipse at 50% 40%, #0e6a4a 0%, #053324 75%);
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #fff;
+  }
+  /* Patrón de panal discreto sobre el fondo */
+  body::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='41.6' height='72' viewBox='0 0 41.6 72'%3E%3Cg fill='none' stroke='%23d4af37' stroke-opacity='0.14' stroke-width='1.5'%3E%3Cpath d='M0 -24 L20.8 -12 L20.8 12 L0 24 L-20.8 12 L-20.8 -12 Z M41.6 -24 L62.4 -12 L62.4 12 L41.6 24 L20.8 12 L20.8 -12 Z M20.8 12 L41.6 24 L41.6 48 L20.8 60 L0 48 L0 24 Z M0 48 L20.8 60 L20.8 84 L0 96 L-20.8 84 L-20.8 60 Z M41.6 48 L62.4 60 L62.4 84 L41.6 96 L20.8 84 L20.8 60 Z'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: 41.6px 72px;
+    -webkit-mask-image: radial-gradient(ellipse at 50% 45%, transparent 25%, #000 75%);
+    mask-image: radial-gradient(ellipse at 50% 45%, transparent 25%, #000 75%);
+  }
+
+  /* ------- leyenda central ------- */
+  .centro {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    z-index: 2;
+    pointer-events: none;
+    /* zona segura lateral: la leyenda nunca queda debajo del QR */
+    padding: 0 clamp(170px, 14vw, 260px);
+  }
+
+  /* Ventanas angostas: menos margen lateral, contenido arriba del QR */
+  @media (max-width: 900px) {
+    .centro { padding: 0 24px 200px; }
+  }
+
+  /* Pantallas bajas: compactar para que nada se encime */
+  @media (max-height: 760px) {
+    .logo-chip { height: 88px; min-width: 130px; padding: 12px 20px; border-radius: 16px; }
+    .logos img { height: 62px; }
+    .logos { margin-bottom: 18px; gap: 26px; }
+    h1 { font-size: clamp(34px, 5vw, 64px); }
+    .subtitulo { margin-top: 10px; font-size: clamp(14px, 1.7vw, 20px); }
+  }
+  .logos {
+    display: flex;
+    align-items: center;
+    gap: 36px;
+    margin-bottom: 30px;
+  }
+  .logo-chip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 124px;
+    min-width: 170px;
+    padding: 16px 28px;
+    background: linear-gradient(180deg, #ffffff 0%, #eef2f6 100%);
+    border: 1px solid rgba(255,255,255,.35);
+    border-radius: 22px;
+    box-shadow: 0 12px 34px rgba(0,0,0,.45), inset 0 1px 0 #fff;
+  }
+  .logos img { height: 88px; }
+  .logo-fallback {
+    display: none;
+    font-weight: 800;
+    font-size: 34px;
+    padding: 14px 22px;
+    border-radius: 12px;
+  }
+  .logo-fallback.aws { background: var(--aws-orange); color: #161e2d; }
+  .logo-fallback.uaemex { background: var(--uaemex-green); color: var(--uaemex-gold); }
+
+  h1 {
+    font-size: clamp(38px, 5.8vw, 84px);
+    font-weight: 900;
+    letter-spacing: 2px;
+    background: linear-gradient(90deg, var(--aws-orange), #ffd166, var(--aws-orange));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 60px rgba(255, 153, 0, .25);
+    animation: brillo 4s ease-in-out infinite;
+  }
+  @keyframes brillo {
+    0%, 100% { filter: drop-shadow(0 0 8px rgba(255,153,0,.35)); }
+    50%      { filter: drop-shadow(0 0 26px rgba(255,153,0,.65)); }
+  }
+  .subtitulo {
+    margin-top: 18px;
+    font-size: clamp(16px, 2vw, 26px);
+    color: #cdd6e0;
+    letter-spacing: 1px;
+  }
+  .subtitulo b { color: var(--uaemex-gold); }
+
+  /* ------- QR inferior izquierdo ------- */
+  .qr {
+    position: absolute;
+    left: 22px;
+    bottom: 22px;
+    z-index: 3;
+    background: #fff;
+    border-radius: 14px;
+    padding: 10px 10px 7px;
+    text-align: center;
+    box-shadow: 0 8px 30px rgba(0,0,0,.45);
+  }
+  .qr img { width: 118px; height: 118px; display: block; margin: 0 auto; }
+  .qr p {
+    margin-top: 5px;
+    color: var(--aws-navy);
+    font-weight: 700;
+    font-size: 12.5px;
+  }
+
+  /* ------- abejas ------- */
+  #panal {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .abeja {
+    position: absolute;
+    width: 64px;
+    will-change: transform;
+  }
+  .abeja .cuerpo { display: block; }
+  .abeja svg { width: 100%; height: auto; display: block; }
+  .abeja .alas {
+    animation: aleteo .12s linear infinite alternate;
+    transform-origin: 48px 20px;
+  }
+  @keyframes aleteo {
+    from { transform: scaleY(1); }
+    to   { transform: scaleY(.55) translateY(3px); }
+  }
+
+  .burbuja {
+    position: absolute;
+    bottom: 72px;
+    left: 50%;
+    transform: translateX(-50%) scale(0);
+    min-width: 180px;
+    max-width: 320px;
+    background: #fffbe9;
+    color: #232f3e;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.35;
+    padding: 14px 18px;
+    border-radius: 18px;
+    border: 3px solid var(--aws-orange);
+    box-shadow: 0 10px 26px rgba(0,0,0,.45);
+    text-align: center;
+    transition: transform .35s cubic-bezier(.34,1.56,.64,1);
+  }
+  .burbuja::after {
+    content: "";
+    position: absolute;
+    bottom: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 12px solid transparent;
+    border-top-color: var(--aws-orange);
+    border-bottom: none;
+  }
+  .abeja.hablando .burbuja { transform: translateX(-50%) scale(1); }
+</style>
+</head>
+<body>
+
+  <div class="centro">
+    <div class="logos">
+      <div class="logo-chip">
+        <img src="{{ url_for('static', filename='aws.png') }}" alt="AWS"
+             onerror="this.style.display='none'; document.getElementById('fb-aws').style.display='block';">
+        <div id="fb-aws" class="logo-fallback aws">AWS</div>
+      </div>
+      <div class="logo-chip">
+        <img src="{{ url_for('static', filename='uaemex.png') }}" alt="UAEMex"
+             onerror="this.style.display='none'; document.getElementById('fb-uaemex').style.display='block';">
+        <div id="fb-uaemex" class="logo-fallback uaemex">UAEMex</div>
+      </div>
+    </div>
+    <h1>AWS Students Builder</h1>
+    <p class="subtitulo">
+      Llevando la nube a los <b>Ingenieros de Software</b> del <b>CUUT · UAEMex</b>
+    </p>
+  </div>
+
+  <div class="qr">
+    <img src="{{ url_for('qr_png') }}" alt="QR para dejar un mensaje">
+    <p>📱 ¡Déjanos un mensaje!</p>
+  </div>
+
+  <div id="panal"></div>
+
+<script>
+(() => {
+  const NUM_ABEJAS = 12;
+  const POLL_MS = 3000;          // cada cuánto se piden mensajes nuevos
+  const DURACION_MENSAJE = 12000; // cuánto tiempo la abeja muestra el mensaje
+
+  const BEE_SVG = `
+    <svg viewBox="0 0 82 66" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="beeG" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffd95e"/>
+          <stop offset="1" stop-color="#f0a417"/>
+        </linearGradient>
+        <clipPath id="beeClip"><ellipse cx="47" cy="38" rx="24" ry="15"/></clipPath>
+      </defs>
+      <g class="alas">
+        <ellipse cx="42" cy="15" rx="13" ry="9" fill="#dbeeff" stroke="#9cc7ee"
+                 stroke-width="1.5" opacity=".9" transform="rotate(-16 42 15)"/>
+        <ellipse cx="57" cy="14" rx="10" ry="7" fill="#eef7ff" stroke="#9cc7ee"
+                 stroke-width="1.5" opacity=".9" transform="rotate(-6 57 14)"/>
+      </g>
+      <path d="M69 42 L80 38 L70 33 Z" fill="#3b3b3b"/>
+      <ellipse cx="47" cy="38" rx="24" ry="15" fill="url(#beeG)" stroke="#3b3b3b" stroke-width="2.5"/>
+      <g clip-path="url(#beeClip)" fill="#3b3b3b">
+        <rect x="40" y="20" width="8" height="36" rx="4"/>
+        <rect x="55" y="20" width="8" height="36" rx="4"/>
+      </g>
+      <path d="M38 52 q-1 5 -5 8 M48 53 q0 5 -3 8 M58 51 q1 5 -2 8"
+            stroke="#3b3b3b" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <path d="M14 24 Q10 13 3 9" stroke="#3b3b3b" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+      <circle cx="3" cy="9" r="2.6" fill="#3b3b3b"/>
+      <path d="M24 22 Q26 11 33 6" stroke="#3b3b3b" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+      <circle cx="33" cy="6" r="2.6" fill="#3b3b3b"/>
+      <circle cx="20" cy="38" r="14" fill="url(#beeG)" stroke="#3b3b3b" stroke-width="2.5"/>
+      <circle cx="14" cy="35" r="4.6" fill="#fff"/>
+      <circle cx="13" cy="36" r="2.2" fill="#2b2b2b"/>
+      <circle cx="25" cy="34" r="4.6" fill="#fff"/>
+      <circle cx="24" cy="35" r="2.2" fill="#2b2b2b"/>
+      <path d="M15 45 Q20 49 25 45" stroke="#3b3b3b" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <ellipse cx="9" cy="42" rx="3" ry="2" fill="#ff9a76" opacity=".7"/>
+      <ellipse cx="29" cy="42" rx="3" ry="2" fill="#ff9a76" opacity=".7"/>
+    </svg>`;
+
+  const panal = document.getElementById("panal");
+  const W = () => window.innerWidth;
+  const H = () => window.innerHeight;
+  const abejas = [];
+  const cola = [];   // mensajes esperando abeja libre
+  let ultimoId = 0;
+
+  class Abeja {
+    constructor() {
+      this.el = document.createElement("div");
+      this.el.className = "abeja";
+      this.el.innerHTML =
+        '<span class="cuerpo">' + BEE_SVG + '</span><div class="burbuja"></div>';
+      this.cuerpo = this.el.querySelector(".cuerpo");
+      this.burbuja = this.el.querySelector(".burbuja");
+      // Tamaños variados para un enjambre más natural
+      const escala = 0.7 + Math.random() * 0.5;
+      this.el.style.width = Math.round(66 * escala) + "px";
+      panal.appendChild(this.el);
+
+      this.x = Math.random() * W();
+      this.y = Math.random() * H();
+      this.angulo = Math.random() * Math.PI * 2;
+      this.velocidad = 1.2 + Math.random() * 1.4;
+      this.fase = Math.random() * Math.PI * 2; // vaivén vertical
+      this.estado = "volando";                 // volando | yendo | hablando
+      this.destino = null;
+    }
+
+    libre() { return this.estado === "volando"; }
+
+    llevarMensaje(texto) {
+      this.estado = "yendo";
+      // Punto visible, lejos de bordes, centro y QR
+      this.destino = {
+        x: 80 + Math.random() * (W() - 400),
+        y: 60 + Math.random() * (H() * 0.45),
+      };
+      this.burbuja.textContent = texto;
+    }
+
+    paso(t) {
+      if (this.estado === "volando") {
+        this.angulo += (Math.random() - 0.5) * 0.14;
+        this.x += Math.cos(this.angulo) * this.velocidad;
+        this.y += Math.sin(this.angulo) * this.velocidad * 0.6
+                + Math.sin(t / 300 + this.fase) * 0.8;
+        // Rebote suave en los bordes
+        if (this.x < -40) this.x = W() + 40;
+        if (this.x > W() + 40) this.x = -40;
+        if (this.y < 10)  { this.y = 10;  this.angulo = -this.angulo; }
+        if (this.y > H() - 60) { this.y = H() - 60; this.angulo = -this.angulo; }
+      } else if (this.estado === "yendo") {
+        const dx = this.destino.x - this.x;
+        const dy = this.destino.y - this.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 6) {
+          this.estado = "hablando";
+          this.el.classList.add("hablando");
+          setTimeout(() => {
+            this.el.classList.remove("hablando");
+            setTimeout(() => { this.estado = "volando"; }, 400);
+          }, DURACION_MENSAJE);
+        } else {
+          this.x += (dx / dist) * 3.5;
+          this.y += (dy / dist) * 3.5;
+          this.angulo = Math.atan2(dy, dx);
+        }
+      }
+      // estado "hablando": quieta, solo un flotado suave
+      const flote = this.estado === "hablando" ? Math.sin(t / 350) * 3 : 0;
+      const mirando = Math.cos(this.angulo) < 0 ? 1 : -1; // sprite mira a la izq.
+      this.el.style.transform = `translate(${this.x}px, ${this.y + flote}px)`;
+      // Solo se voltea el cuerpo; la burbuja de texto queda derecha
+      this.cuerpo.style.transform = `scaleX(${mirando})`;
+    }
+  }
+
+  for (let i = 0; i < NUM_ABEJAS; i++) abejas.push(new Abeja());
+
+  function animar(t) {
+    // Asignar mensajes pendientes a abejas libres
+    while (cola.length) {
+      const libre = abejas.find(a => a.libre());
+      if (!libre) break;
+      libre.llevarMensaje(cola.shift());
+    }
+    abejas.forEach(a => a.paso(t));
+    requestAnimationFrame(animar);
+  }
+
+  async function poll() {
+    try {
+      const r = await fetch(`/api/nuevos?after=${ultimoId}`);
+      const datos = await r.json();
+      if (datos.activado) {
+        for (const m of datos.mensajes) {
+          ultimoId = Math.max(ultimoId, m.id);
+          cola.push(m.texto);
+        }
+      }
+    } catch (e) { /* sin conexión momentánea: reintenta en el siguiente poll */ }
+  }
+
+  // Arranque: tomar el último id para NO repetir mensajes viejos
+  fetch("/api/estado")
+    .then(r => r.json())
+    .then(d => { ultimoId = d.ultimo_id; })
+    .finally(() => {
+      setInterval(poll, POLL_MS);
+      requestAnimationFrame(animar);
+    });
+})();
+</script>
+</body>
+</html>
