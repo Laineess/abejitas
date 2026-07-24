@@ -1,83 +1,93 @@
+# -*- coding: utf-8 -*-
+"""AWS Students Builder — muro de mensajes en vivo.
+
+Sin base de datos: los mensajes aprobados NO se guardan, se transmiten en
+tiempo real a la(s) pantalla(s) por WebSocket (flask-sock). Solo se conserva
+en memoria un búfer de los más recientes (se pierde al reiniciar), suficiente
+para el panel de admin. El texto llega y sale siempre como Unicode/UTF-8.
+"""
+
 import io
+import json
 import os
-import sqlite3
+import queue
+import threading
 import time
+from collections import deque
 
 import qrcode
-from flask import (Flask, g, jsonify, redirect, render_template, request,
+from flask import (Flask, jsonify, redirect, render_template, request,
                    send_file, session, url_for)
+from flask_sock import Sock
 
 from moderacion import buscar_groseria
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "mensajes.db")
 
 COOLDOWN = 10
 MAX_CARACTERES = 100
+MAX_RECIENTES = 50   # cuántos mensajes recientes se guardan en memoria
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+# jsonify sin escapar acentos/emojis (respuesta UTF-8 legible)
+app.json.ensure_ascii = False
 app.secret_key = os.environ.get("SECRET_KEY", "cambia-esta-clave-en-produccion")
+sock = Sock(app)
 
 # Contraseña del panel de admin (cámbiala con la variable de entorno)
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "abejas2026")
 
-# Cooldown en memoria: ip -> timestamp del último envío
-_ultimo_envio = {}
-
-
-# ---------------------------------------------------------------- base de datos
-
-def get_db():
-    db = getattr(g, "_db", None)
-    if db is None:
-        db = g._db = sqlite3.connect(DB_PATH)
-        db.row_factory = sqlite3.Row
-    return db
-
-
-@app.teardown_appcontext
-def cerrar_db(_exc):
-    db = getattr(g, "_db", None)
-    if db is not None:
-        db.close()
-
-
-def init_db():
-    con = sqlite3.connect(DB_PATH)
-    con.executescript("""
-        CREATE TABLE IF NOT EXISTS mensajes (
-            id     INTEGER PRIMARY KEY AUTOINCREMENT,
-            texto  TEXT NOT NULL,
-            creado REAL NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS config (
-            clave TEXT PRIMARY KEY,
-            valor TEXT NOT NULL
-        );
-        INSERT OR IGNORE INTO config (clave, valor) VALUES ('mostrar_mensajes', '1');
-    """)
-    con.commit()
-    con.close()
-
-
-def mostrar_activado() -> bool:
-    fila = get_db().execute(
-        "SELECT valor FROM config WHERE clave = 'mostrar_mensajes'").fetchone()
-    return fila is not None and fila["valor"] == "1"
-
-
-def set_mostrar(activado: bool):
-    db = get_db()
-    db.execute("UPDATE config SET valor = ? WHERE clave = 'mostrar_mensajes'",
-               ("1" if activado else "0",))
-    db.commit()
+# ------------------------------------------------------------- estado en memoria
+_lock = threading.Lock()
+_mensajes = deque(maxlen=MAX_RECIENTES)   # recientes: {"id": int, "texto": str}
+_siguiente_id = 1
+_mostrar = True                            # ¿se muestran los mensajes en pantalla?
+_clientes = set()                          # colas de las pantallas conectadas por WS
+_ultimo_envio = {}                         # cooldown: ip -> timestamp del último envío
 
 
 def ip_cliente() -> str:
     # Detrás de un proxy/balanceador llega en X-Forwarded-For
     xff = request.headers.get("X-Forwarded-For", "")
     return xff.split(",")[0].strip() if xff else (request.remote_addr or "?")
+
+
+def _difundir(evento: dict):
+    """Envía un evento JSON-serializable a todas las pantallas conectadas."""
+    with _lock:
+        clientes = list(_clientes)
+    for cola in clientes:
+        try:
+            cola.put(evento)
+        except Exception:
+            pass
+
+
+# --------------------------------------------------------------- WebSocket
+
+@sock.route("/ws")
+def ws_pantalla(ws):
+    """Canal de solo salida: la pantalla recibe estado y mensajes nuevos."""
+    cola = queue.SimpleQueue()
+
+    with _lock:
+        _clientes.add(cola)
+        estado_inicial = {"tipo": "estado", "activado": _mostrar}
+
+    ws.send(json.dumps(estado_inicial))
+    try:
+        while True:
+            try:
+                evento = cola.get(timeout=25)
+            except queue.Empty:
+                evento = {"tipo": "ping"}     # latido para detectar desconexión
+            ws.send(json.dumps(evento))
+    except Exception:
+        pass                                  # cliente cerró la conexión
+    finally:
+        with _lock:
+            _clientes.discard(cola)
 
 
 # --------------------------------------------------------------------- páginas
@@ -111,7 +121,7 @@ def recibir_mensaje():
     ip = ip_cliente()
     ahora = time.time()
 
-    # Cooldown de 10 segundos por visitante
+    # Cooldown por visitante
     transcurrido = ahora - _ultimo_envio.get(ip, 0)
     if transcurrido < COOLDOWN:
         restante = int(COOLDOWN - transcurrido) + 1
@@ -128,37 +138,25 @@ def recibir_mensaje():
 
     groseria = buscar_groseria(texto)
     if groseria:
-        # Cuenta como intento: también consume el cooldown
-        _ultimo_envio[ip] = ahora
+        _ultimo_envio[ip] = ahora            # el intento también consume cooldown
         app.logger.warning("Mensaje rechazado de %s (palabra: %s)", ip, groseria)
         return jsonify(ok=False, error="groseria",
                        mensaje="⚠️ Tu mensaje contiene lenguaje ofensivo y no será "
                                "mostrado. Recuerda ser respetuoso. 🐝"), 400
 
     _ultimo_envio[ip] = ahora
-    db = get_db()
-    db.execute("INSERT INTO mensajes (texto, creado) VALUES (?, ?)", (texto, ahora))
-    db.commit()
+    global _siguiente_id
+    with _lock:
+        msg = {"id": _siguiente_id, "texto": texto}
+        _siguiente_id += 1
+        _mensajes.append(msg)
+        mostrar = _mostrar
+
+    if mostrar:
+        _difundir({"tipo": "mensaje", "id": msg["id"], "texto": texto})
+
     return jsonify(ok=True,
                    mensaje="¡Gracias! Una abejita llevará tu mensaje a la pantalla. 🐝"), 201
-
-
-@app.route("/api/estado")
-def estado():
-    fila = get_db().execute("SELECT MAX(id) AS ultimo FROM mensajes").fetchone()
-    return jsonify(activado=mostrar_activado(), ultimo_id=fila["ultimo"] or 0)
-
-
-@app.route("/api/nuevos")
-def nuevos():
-    if not mostrar_activado():
-        return jsonify(activado=False, mensajes=[])
-    after = request.args.get("after", 0, type=int)
-    filas = get_db().execute(
-        "SELECT id, texto FROM mensajes WHERE id > ? ORDER BY id LIMIT 10",
-        (after,)).fetchall()
-    return jsonify(activado=True,
-                   mensajes=[{"id": f["id"], "texto": f["texto"]} for f in filas])
 
 
 # ----------------------------------------------------------------------- admin
@@ -175,17 +173,22 @@ def admin():
     if not session.get("admin"):
         return render_template("admin.html", autenticado=False, error=None)
 
-    ultimos = get_db().execute(
-        "SELECT id, texto, creado FROM mensajes ORDER BY id DESC LIMIT 20").fetchall()
+    with _lock:
+        recientes = list(_mensajes)[-20:][::-1]
+        activado = _mostrar
     return render_template("admin.html", autenticado=True, error=None,
-                           activado=mostrar_activado(), mensajes=ultimos)
+                           activado=activado, mensajes=recientes)
 
 
 @app.route("/admin/toggle", methods=["POST"])
 def admin_toggle():
     if not session.get("admin"):
         return redirect(url_for("admin"))
-    set_mostrar(not mostrar_activado())
+    global _mostrar
+    with _lock:
+        _mostrar = not _mostrar
+        activado = _mostrar
+    _difundir({"tipo": "estado", "activado": activado})
     return redirect(url_for("admin"))
 
 
@@ -195,8 +198,7 @@ def admin_logout():
     return redirect(url_for("admin"))
 
 
-init_db()
-
 if __name__ == "__main__":
     puerto = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=puerto)
+    # threaded=True: atiende WebSockets y HTTP a la vez con el servidor de dev
+    app.run(host="0.0.0.0", port=puerto, threaded=True)

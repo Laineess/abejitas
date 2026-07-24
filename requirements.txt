@@ -1,2 +1,4 @@
 Flask>=3.0
 qrcode[pil]>=7.4
+flask-sock>=0.7
+spanlp>=1.1

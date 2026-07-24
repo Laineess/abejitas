@@ -218,7 +218,6 @@
 <script>
 (() => {
   const NUM_ABEJAS = 12;
-  const POLL_MS = 3000;          // cada cuánto se piden mensajes nuevos
   const DURACION_MENSAJE = 12000; // cuánto tiempo la abeja muestra el mensaje
 
   const BEE_SVG = `
@@ -263,7 +262,7 @@
   const H = () => window.innerHeight;
   const abejas = [];
   const cola = [];   // mensajes esperando abeja libre
-  let ultimoId = 0;
+  let activado = true;
 
   class Abeja {
     constructor() {
@@ -349,27 +348,39 @@
     requestAnimationFrame(animar);
   }
 
-  async function poll() {
-    try {
-      const r = await fetch(`/api/nuevos?after=${ultimoId}`);
-      const datos = await r.json();
-      if (datos.activado) {
-        for (const m of datos.mensajes) {
-          ultimoId = Math.max(ultimoId, m.id);
-          cola.push(m.texto);
-        }
+  // --- WebSocket: la pantalla recibe los mensajes en vivo (sin polling) ---
+  let ws = null;
+  let reintento = 1000;   // backoff de reconexión (ms)
+
+  function conectar() {
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+    ws.onopen = () => { reintento = 1000; };
+
+    ws.onmessage = (ev) => {
+      let d;
+      try { d = JSON.parse(ev.data); } catch { return; }
+      if (d.tipo === "mensaje") {
+        if (activado) cola.push(d.texto);
+      } else if (d.tipo === "estado") {
+        activado = d.activado;
+        if (!activado) cola.length = 0;   // apagado: descarta pendientes
       }
-    } catch (e) { /* sin conexión momentánea: reintenta en el siguiente poll */ }
+      // d.tipo === "ping": solo mantiene viva la conexión
+    };
+
+    ws.onclose = () => {
+      // Reconexión con backoff exponencial (máx. 15 s)
+      setTimeout(conectar, reintento);
+      reintento = Math.min(reintento * 2, 15000);
+    };
+
+    ws.onerror = () => { try { ws.close(); } catch {} };
   }
 
-  // Arranque: tomar el último id para NO repetir mensajes viejos
-  fetch("/api/estado")
-    .then(r => r.json())
-    .then(d => { ultimoId = d.ultimo_id; })
-    .finally(() => {
-      setInterval(poll, POLL_MS);
-      requestAnimationFrame(animar);
-    });
+  conectar();
+  requestAnimationFrame(animar);
 })();
 </script>
 </body>
