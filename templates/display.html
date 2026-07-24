@@ -4,7 +4,22 @@
 <meta charset="UTF-8">
 <title>AWS Students Builder — CUUT UAEMex</title>
 <style>
+  /* Montserrat vendorizada para que la expo funcione sin internet */
+  @font-face {
+    font-family: "Montserrat"; font-weight: 400; font-display: swap;
+    src: url("{{ url_for('static', filename='montserrat-400.woff2') }}") format("woff2");
+  }
+  @font-face {
+    font-family: "Montserrat"; font-weight: 600; font-display: swap;
+    src: url("{{ url_for('static', filename='montserrat-600.woff2') }}") format("woff2");
+  }
+  @font-face {
+    font-family: "Montserrat"; font-weight: 800; font-display: swap;
+    src: url("{{ url_for('static', filename='montserrat-800.woff2') }}") format("woff2");
+  }
   :root {
+    /* Montserrat (vendorizada, aplica en cualquier OS); SF/system-ui de respaldo */
+    --fuente: "Montserrat", -apple-system, system-ui, "Segoe UI", Arial, sans-serif;
     --aws-dark: #161e2d;
     --aws-navy: #232f3e;
     --aws-orange: #ff9900;
@@ -14,8 +29,13 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; }
   body {
-    background: radial-gradient(ellipse at 50% 40%, #0e6a4a 0%, #053324 75%);
-    font-family: "Segoe UI", Arial, sans-serif;
+    /* Velo oscuro sobre la foto del campus para que el texto claro se lea;
+       más denso al centro, donde va la leyenda. */
+    background:
+      radial-gradient(ellipse at 50% 42%, rgba(4,26,18,.72) 0%, rgba(4,26,18,.38) 60%, rgba(4,26,18,.55) 100%),
+      url("{{ url_for('static', filename='fondo.png') }}") center / cover no-repeat,
+      #053324;
+    font-family: var(--fuente);
     color: #fff;
   }
   /* Patrón de panal discreto sobre el fondo */
@@ -65,19 +85,18 @@
     gap: 36px;
     margin-bottom: 30px;
   }
+  /* Logos blancos directos sobre el fondo: sin chip ni fondo blanco */
   .logo-chip {
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 124px;
-    min-width: 170px;
-    padding: 16px 28px;
-    background: linear-gradient(180deg, #ffffff 0%, #eef2f6 100%);
-    border: 1px solid rgba(255,255,255,.35);
-    border-radius: 22px;
-    box-shadow: 0 12px 34px rgba(0,0,0,.45), inset 0 1px 0 #fff;
+    height: 108px;
   }
-  .logos img { height: 88px; }
+  /* drop-shadow para que el logo blanco resalte sobre zonas claras del fondo */
+  .logos img {
+    height: 92px;
+    filter: drop-shadow(0 3px 10px rgba(0,0,0,.45));
+  }
   .logo-fallback {
     display: none;
     font-weight: 800;
@@ -88,20 +107,12 @@
   .logo-fallback.aws { background: var(--aws-orange); color: #161e2d; }
   .logo-fallback.uaemex { background: var(--uaemex-green); color: var(--uaemex-gold); }
 
+  /* Texto limpio: sin iluminado ni gradiente animado, Montserrat 800 en blanco */
   h1 {
     font-size: clamp(38px, 5.8vw, 84px);
-    font-weight: 900;
-    letter-spacing: 2px;
-    background: linear-gradient(90deg, var(--aws-orange), #ffd166, var(--aws-orange));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    text-shadow: 0 0 60px rgba(255, 153, 0, .25);
-    animation: brillo 4s ease-in-out infinite;
-  }
-  @keyframes brillo {
-    0%, 100% { filter: drop-shadow(0 0 8px rgba(255,153,0,.35)); }
-    50%      { filter: drop-shadow(0 0 26px rgba(255,153,0,.65)); }
+    font-weight: 800;
+    letter-spacing: .5px;
+    color: #fff;
   }
   .subtitulo {
     margin-top: 18px;
@@ -144,15 +155,60 @@
     width: 64px;
     will-change: transform;
   }
-  .abeja .cuerpo { display: block; }
-  .abeja svg { width: 100%; height: auto; display: block; }
-  .abeja .alas {
-    animation: aleteo .12s linear infinite alternate;
-    transform-origin: 48px 20px;
+  /* El sprite está partido en dos capas (abeja-cuerpo.png / abeja-alas.png)
+     para que las alas aleteen de verdad girando sobre su base. */
+  .abeja .cuerpo {
+    display: block;
+    position: relative;
+    filter: drop-shadow(0 6px 10px rgba(0,0,0,.45));
   }
+  .abeja img {
+    width: 100%;
+    height: auto;
+    display: block;
+    image-rendering: pixelated; /* sin esto el pixel art se ve borroso */
+  }
+  .abeja .capa-alas {
+    position: absolute;
+    inset: 0;
+    transform-origin: 47% 47%; /* base de las alas, medida sobre el PNG */
+    animation: aleteo .09s steps(2, end) infinite alternate;
+  }
+  .abeja .capa-cuerpo {
+    animation: retroceso .09s steps(2, end) infinite alternate;
+  }
+  /* Boca abierta: capa aparte encima de la sonrisa, invisible salvo al hablar.
+     Lleva el mismo retroceso que el cuerpo o se despega de la cara al aletear. */
+  .abeja .capa-boca {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    animation: retroceso .09s steps(2, end) infinite alternate;
+  }
+  .abeja.escribiendo .capa-boca {
+    animation: retroceso .09s steps(2, end) infinite alternate,
+               boca .78s infinite;
+  }
+  /* Corte seco, no fundido: una boca que hace fade no se lee como habla.
+     Los tramos son desiguales a propósito: a intervalos parejos se ve
+     mecánica, así suena a sílabas. */
+  @keyframes boca {
+    0%,  16%  { opacity: 1; }
+    17%, 27%  { opacity: 0; }
+    28%, 44%  { opacity: 1; }
+    45%, 51%  { opacity: 0; }
+    52%, 76%  { opacity: 1; }
+    77%, 100% { opacity: 0; }
+  }
+  /* steps(2) y no una curva suave: un sprite pixel art con movimiento
+     interpolado se ve fuera de estilo. El salto seco lee como animación real. */
   @keyframes aleteo {
-    from { transform: scaleY(1); }
-    to   { transform: scaleY(.55) translateY(3px); }
+    from { transform: rotate(-7deg) scaleY(1); }
+    to   { transform: rotate(15deg) scaleY(.6); }
+  }
+  @keyframes retroceso {
+    from { transform: translateY(0); }
+    to   { transform: translateY(2px); }
   }
 
   .burbuja {
@@ -186,18 +242,19 @@
   }
   .abeja.hablando .burbuja { transform: translateX(-50%) scale(1); }
 </style>
+<script src="{{ url_for('static', filename='socket.io.min.js') }}"></script>
 </head>
 <body>
 
   <div class="centro">
     <div class="logos">
       <div class="logo-chip">
-        <img src="{{ url_for('static', filename='aws.png') }}" alt="AWS"
+        <img src="{{ url_for('static', filename='aws-logo.png') }}" alt="AWS"
              onerror="this.style.display='none'; document.getElementById('fb-aws').style.display='block';">
         <div id="fb-aws" class="logo-fallback aws">AWS</div>
       </div>
       <div class="logo-chip">
-        <img src="{{ url_for('static', filename='uaemex.png') }}" alt="UAEMex"
+        <img src="{{ url_for('static', filename='uaem-logo.png') }}" alt="UAEMex"
              onerror="this.style.display='none'; document.getElementById('fb-uaemex').style.display='block';">
         <div id="fb-uaemex" class="logo-fallback uaemex">UAEMex</div>
       </div>
@@ -218,45 +275,40 @@
 <script>
 (() => {
   const NUM_ABEJAS = 12;
-  const POLL_MS = 3000;          // cada cuánto se piden mensajes nuevos
   const DURACION_MENSAJE = 12000; // cuánto tiempo la abeja muestra el mensaje
 
-  const BEE_SVG = `
-    <svg viewBox="0 0 82 66" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="beeG" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#ffd95e"/>
-          <stop offset="1" stop-color="#f0a417"/>
-        </linearGradient>
-        <clipPath id="beeClip"><ellipse cx="47" cy="38" rx="24" ry="15"/></clipPath>
-      </defs>
-      <g class="alas">
-        <ellipse cx="42" cy="15" rx="13" ry="9" fill="#dbeeff" stroke="#9cc7ee"
-                 stroke-width="1.5" opacity=".9" transform="rotate(-16 42 15)"/>
-        <ellipse cx="57" cy="14" rx="10" ry="7" fill="#eef7ff" stroke="#9cc7ee"
-                 stroke-width="1.5" opacity=".9" transform="rotate(-6 57 14)"/>
-      </g>
-      <path d="M69 42 L80 38 L70 33 Z" fill="#3b3b3b"/>
-      <ellipse cx="47" cy="38" rx="24" ry="15" fill="url(#beeG)" stroke="#3b3b3b" stroke-width="2.5"/>
-      <g clip-path="url(#beeClip)" fill="#3b3b3b">
-        <rect x="40" y="20" width="8" height="36" rx="4"/>
-        <rect x="55" y="20" width="8" height="36" rx="4"/>
-      </g>
-      <path d="M38 52 q-1 5 -5 8 M48 53 q0 5 -3 8 M58 51 q1 5 -2 8"
-            stroke="#3b3b3b" stroke-width="2" fill="none" stroke-linecap="round"/>
-      <path d="M14 24 Q10 13 3 9" stroke="#3b3b3b" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-      <circle cx="3" cy="9" r="2.6" fill="#3b3b3b"/>
-      <path d="M24 22 Q26 11 33 6" stroke="#3b3b3b" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-      <circle cx="33" cy="6" r="2.6" fill="#3b3b3b"/>
-      <circle cx="20" cy="38" r="14" fill="url(#beeG)" stroke="#3b3b3b" stroke-width="2.5"/>
-      <circle cx="14" cy="35" r="4.6" fill="#fff"/>
-      <circle cx="13" cy="36" r="2.2" fill="#2b2b2b"/>
-      <circle cx="25" cy="34" r="4.6" fill="#fff"/>
-      <circle cx="24" cy="35" r="2.2" fill="#2b2b2b"/>
-      <path d="M15 45 Q20 49 25 45" stroke="#3b3b3b" stroke-width="2" fill="none" stroke-linecap="round"/>
-      <ellipse cx="9" cy="42" rx="3" ry="2" fill="#ff9a76" opacity=".7"/>
-      <ellipse cx="29" cy="42" rx="3" ry="2" fill="#ff9a76" opacity=".7"/>
-    </svg>`;
+  const BEE_IMG =
+    '<img class="capa-cuerpo" src="/static/abeja-cuerpo.png" alt="">' +
+    '<img class="capa-boca"   src="/static/abeja-boca.png"   alt="">' +
+    '<img class="capa-alas"   src="/static/abeja-alas.png"   alt="">';
+
+  // Interpola de un ángulo a otro por el camino corto. El atan2 normaliza la
+  // diferencia a [-PI, PI]; sin eso, al cruzar de 359° a 1° daría media vuelta.
+  function mezclarAngulo(a, b, k) {
+    const d = b - a;
+    return a + Math.atan2(Math.sin(d), Math.cos(d)) * k;
+  }
+
+  let audioActivado = true; // lo manda el servidor (toggle del panel admin)
+
+  function hablarEnVoz(texto) {
+    if (!audioActivado) return;
+    if (!("speechSynthesis" in window)) return;
+    // Todas hablan aunque se encimen: la voz arranca junto con la burbuja.
+    // Se le da un pitch aleatorio a cada una para que no suene monótono.
+    const u = new SpeechSynthesisUtterance(texto);
+    u.lang = "es-MX";
+    u.pitch = 1.2 + Math.random() * 0.5;   // vocecita de abeja, variada
+    u.rate = 1.05;
+    const voz = speechSynthesis.getVoices().find(v => v.lang.startsWith("es"));
+    if (voz) u.voice = voz;
+    speechSynthesis.speak(u);
+  }
+  // Chrome bloquea el primer speak() sin gesto del usuario: un clic en la
+  // pantalla al arrancar la expo lo desbloquea para toda la sesión.
+  addEventListener("pointerdown", () => {
+    speechSynthesis.speak(new SpeechSynthesisUtterance(" "));
+  }, { once: true });
 
   const panal = document.getElementById("panal");
   const W = () => window.innerWidth;
@@ -270,24 +322,52 @@
       this.el = document.createElement("div");
       this.el.className = "abeja";
       this.el.innerHTML =
-        '<span class="cuerpo">' + BEE_SVG + '</span><div class="burbuja"></div>';
+        '<span class="cuerpo">' + BEE_IMG + '</span><div class="burbuja"></div>';
       this.cuerpo = this.el.querySelector(".cuerpo");
       this.burbuja = this.el.querySelector(".burbuja");
-      // Tamaños variados para un enjambre más natural
-      const escala = 0.7 + Math.random() * 0.5;
-      this.el.style.width = Math.round(66 * escala) + "px";
+      // Profundidad: 0 = al fondo, 1 = al frente. De aquí salen tamaño,
+      // velocidad, desenfoque y opacidad, para que el enjambre tenga volumen.
+      this.prof = Math.random();
+      this.el.style.width = Math.round(96 * (0.55 + this.prof * 0.75)) + "px";
+      this.el.style.zIndex = Math.round(this.prof * 10);
+      this.el.style.opacity = (0.6 + this.prof * 0.4).toFixed(2);
+      this.cuerpo.style.filter = `blur(${((1 - this.prof) * 2.2).toFixed(2)}px)`;
+      // ponytail: desfase por abeja para que el enjambre no aletee en sincronía.
+      // Las dos capas comparten el MISMO desfase o el cuerpo y las alas se separan.
+      const desfase = (-Math.random() * 0.18) + "s";
+      this.el.querySelectorAll("img").forEach(i => i.style.animationDelay = desfase);
       panal.appendChild(this.el);
 
       this.x = Math.random() * W();
       this.y = Math.random() * H();
       this.angulo = Math.random() * Math.PI * 2;
-      this.velocidad = 1.2 + Math.random() * 1.4;
+      // Las del fondo se mueven más lento: es lo que vende la profundidad
+      this.velocidad = 0.7 + this.prof * 1.7;
       this.fase = Math.random() * Math.PI * 2; // vaivén vertical
+      this.inclina = 0;                        // grados, se persigue suave
       this.estado = "volando";                 // volando | yendo | hablando
       this.destino = null;
     }
 
     libre() { return this.estado === "volando"; }
+
+    // Vuelve a su plano de profundidad y a volar libre
+    aVolar() {
+      this.estado = "volando";
+      this.el.style.zIndex = Math.round(this.prof * 10);
+      this.el.style.opacity = (0.6 + this.prof * 0.4).toFixed(2);
+      this.cuerpo.style.filter = `blur(${((1 - this.prof) * 2.2).toFixed(2)}px)`;
+    }
+
+    // Corte en seco: cancela timers, boca, burbuja y suelta a volar de una vez
+    callar() {
+      clearInterval(this._tw);
+      clearTimeout(this._t1);
+      clearTimeout(this._t2);
+      this.el.classList.remove("hablando", "escribiendo");
+      this.burbuja.textContent = "";
+      this.aVolar();
+    }
 
     llevarMensaje(texto) {
       this.estado = "yendo";
@@ -296,20 +376,54 @@
         x: 80 + Math.random() * (W() - 400),
         y: 60 + Math.random() * (H() * 0.45),
       };
-      this.burbuja.textContent = texto;
+      this.texto = texto;
+      this.burbuja.textContent = "";
+    }
+
+    // Sale letra por letra: es lo que hace que se lea como "está hablando".
+    // La boca se mueve exactamente mientras dura el tecleo, y se detiene sola.
+    escribir(texto) {
+      clearInterval(this._tw);
+      this.el.classList.add("escribiendo");
+      let i = 0;
+      this._tw = setInterval(() => {
+        this.burbuja.textContent = texto.slice(0, ++i);
+        if (i >= texto.length) {
+          clearInterval(this._tw);
+          this.el.classList.remove("escribiendo");
+        }
+      }, 45);
     }
 
     paso(t) {
       if (this.estado === "volando") {
-        this.angulo += (Math.random() - 0.5) * 0.14;
+        // Giro suave: dos senoidales de periodo distinto dan una curva continua
+        // que no se repite. Antes era ruido nuevo cada frame, y por eso se veía
+        // a tirones, como mosca.
+        this.angulo += Math.sin(t / 1900 + this.fase) * 0.013
+                     + Math.sin(t /  730 + this.fase * 2.7) * 0.006;
+
+        // Cerca del borde vira progresivamente hacia adentro, en vez del
+        // rebote seco de antes (que invertía el ángulo de golpe).
+        const margen = 110;
+        const cerca = Math.max(
+          (margen - this.x) / margen,
+          (this.x - (W() - margen)) / margen,
+          (margen - this.y) / margen,
+          (this.y - (H() - margen)) / margen
+        );
+        if (cerca > 0) {
+          const haciaDentro = Math.atan2(H() / 2 - this.y, W() / 2 - this.x);
+          this.angulo = mezclarAngulo(this.angulo, haciaDentro,
+                                      Math.min(1, cerca) * 0.05);
+        }
+
         this.x += Math.cos(this.angulo) * this.velocidad;
-        this.y += Math.sin(this.angulo) * this.velocidad * 0.6
-                + Math.sin(t / 300 + this.fase) * 0.8;
-        // Rebote suave en los bordes
-        if (this.x < -40) this.x = W() + 40;
-        if (this.x > W() + 40) this.x = -40;
-        if (this.y < 10)  { this.y = 10;  this.angulo = -this.angulo; }
-        if (this.y > H() - 60) { this.y = H() - 60; this.angulo = -this.angulo; }
+        this.y += Math.sin(this.angulo) * this.velocidad * 0.55
+                + Math.sin(t / 620 + this.fase) * 0.35;
+        // Red de seguridad por si un resize la deja fuera de pantalla
+        this.x = Math.max(-60, Math.min(W() + 60, this.x));
+        this.y = Math.max(0, Math.min(H() - 50, this.y));
       } else if (this.estado === "yendo") {
         const dx = this.destino.x - this.x;
         const dy = this.destino.y - this.y;
@@ -317,59 +431,89 @@
         if (dist < 6) {
           this.estado = "hablando";
           this.el.classList.add("hablando");
-          setTimeout(() => {
+          // Al frente y sin desenfoque: el mensaje tiene que leerse
+          this.el.style.zIndex = 50;
+          this.el.style.opacity = 1;
+          this.cuerpo.style.filter = "none";
+          this.escribir(this.texto);
+          hablarEnVoz(this.texto);
+          this._t1 = setTimeout(() => {
             this.el.classList.remove("hablando");
-            setTimeout(() => { this.estado = "volando"; }, 400);
+            this._t2 = setTimeout(() => this.aVolar(), 400);
           }, DURACION_MENSAJE);
         } else {
-          this.x += (dx / dist) * 3.5;
-          this.y += (dy / dist) * 3.5;
-          this.angulo = Math.atan2(dy, dx);
+          // Frena al acercarse: llegada suave en vez de frenazo en seco.
+          // El mínimo de 1.1 garantiza que siempre acabe entrando al umbral.
+          const vel = Math.max(1.1, Math.min(4, dist * 0.06));
+          this.x += (dx / dist) * vel;
+          this.y += (dy / dist) * vel;
+          this.angulo = mezclarAngulo(this.angulo, Math.atan2(dy, dx), 0.12);
         }
       }
       // estado "hablando": quieta, solo un flotado suave
       const flote = this.estado === "hablando" ? Math.sin(t / 350) * 3 : 0;
       const mirando = Math.cos(this.angulo) < 0 ? 1 : -1; // sprite mira a la izq.
+      // Se inclina hacia donde va: sube el morro al subir, lo baja al bajar
+      const objetivo = this.estado === "hablando"
+        ? 0
+        : Math.max(-16, Math.min(16, Math.sin(this.angulo) * 20)) * -mirando;
+      // Se persigue el ángulo en vez de saltar a él: si no, al cruzar la
+      // vertical el volteo del sprite hacía brincar la inclinación.
+      this.inclina += (objetivo - this.inclina) * 0.07;
       this.el.style.transform = `translate(${this.x}px, ${this.y + flote}px)`;
       // Solo se voltea el cuerpo; la burbuja de texto queda derecha
-      this.cuerpo.style.transform = `scaleX(${mirando})`;
+      this.cuerpo.style.transform =
+        `scaleX(${mirando}) rotate(${this.inclina.toFixed(2)}deg)`;
     }
   }
 
   for (let i = 0; i < NUM_ABEJAS; i++) abejas.push(new Abeja());
 
   function animar(t) {
-    // Asignar mensajes pendientes a abejas libres
-    while (cola.length) {
+    // Varias abejas hablan a la vez cuando la cola crece: con pocos mensajes
+    // habla una; si se acumulan, entran más (hasta todas). Reparte la carga
+    // en vez de leer de una en una. La VOZ sigue siendo una a la vez
+    // (hablarEnVoz omite si ya suena otra), o sería cacofonía.
+    const ocupadas = abejas.filter(a => !a.libre()).length;
+    const maxHablando = Math.min(NUM_ABEJAS, 2 + cola.length);
+    let cupo = maxHablando - ocupadas;
+    while (cola.length && cupo > 0) {
       const libre = abejas.find(a => a.libre());
       if (!libre) break;
       libre.llevarMensaje(cola.shift());
+      cupo--;
     }
     abejas.forEach(a => a.paso(t));
     requestAnimationFrame(animar);
   }
 
-  async function poll() {
-    try {
-      const r = await fetch(`/api/nuevos?after=${ultimoId}`);
-      const datos = await r.json();
-      if (datos.activado) {
-        for (const m of datos.mensajes) {
-          ultimoId = Math.max(ultimoId, m.id);
-          cola.push(m.texto);
-        }
-      }
-    } catch (e) { /* sin conexión momentánea: reintenta en el siguiente poll */ }
-  }
+  // Tiempo real por Socket.IO: el servidor empuja cada mensaje y cada cambio
+  // de config. Ya no se hace polling. Al reconectar no se reenvían mensajes
+  // viejos (a propósito: la pantalla muestra lo que llega en vivo).
+  const socket = io();
 
-  // Arranque: tomar el último id para NO repetir mensajes viejos
+  let mostrarMensajes = true;   // el admin puede pausar la pantalla
+  socket.on("mensaje", (m) => {
+    if (mostrarMensajes) cola.push(m.texto);
+  });
+  socket.on("config", (c) => {
+    mostrarMensajes = c.activado;
+    audioActivado = c.audio;
+    // Corte en seco: si se apaga el audio, calla la voz que esté sonando.
+    if (!audioActivado && "speechSynthesis" in window) speechSynthesis.cancel();
+    // Si se apagan los mensajes, se detiene todo al instante: se vacía la cola
+    // pendiente y las abejas que hablan callan, sin mostrar los que faltaban.
+    if (!mostrarMensajes) {
+      cola.length = 0;
+      abejas.forEach(a => { if (!a.libre()) a.callar(); });
+    }
+  });
+
+  // Estado inicial (mensajes on/off y audio) al cargar la pantalla
   fetch("/api/estado")
     .then(r => r.json())
-    .then(d => { ultimoId = d.ultimo_id; })
-    .finally(() => {
-      setInterval(poll, POLL_MS);
-      requestAnimationFrame(animar);
-    });
+    .then(d => { mostrarMensajes = d.activado; audioActivado = d.audio; })
+    .finally(() => requestAnimationFrame(animar));
 })();
 </script>
 </body>

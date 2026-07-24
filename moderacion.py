@@ -22,6 +22,10 @@ pasar una ofensa.
 import re
 import unicodedata
 
+from better_profanity import profanity  # 4ª capa: palabrotas en inglés
+
+profanity.load_censor_words()
+
 # ----------------------------------------------------------------- capa 1
 # Raíces: se bloquea cualquier palabra que EMPIECE con ellas.
 # Elegidas para no chocar con palabras normales (no "verg" porque
@@ -123,6 +127,22 @@ _SUFIJOS = (r"(?:s|es|a|o|as|os|ita|ito|itas|itos|illa|illo|illas|illos"
             r"|isimo|isima|isimos|isimas|zote|zotes)?")
 
 
+def solo_texto(texto: str) -> str:
+    """Quita emojis y símbolos: deja letras, números, espacios y puntuación.
+
+    Se rechazan las categorías Unicode de símbolo (S*) y de control/formato
+    (C*, incluye ZWJ y selectores de variación de los emojis). Conserva
+    acentos, ñ y signos normales (¿ ¡ ? ! , . …).
+    """
+    limpio = "".join(
+        c for c in texto
+        if unicodedata.category(c)[0] not in ("S", "C")
+        and not 0xFE00 <= ord(c) <= 0xFE0F   # selectores de variación de emoji
+        or c in "\t\n"
+    )
+    return re.sub(r"\s+", " ", limpio).strip()
+
+
 def _normalizar(texto: str) -> str:
     texto = texto.lower().translate(_MAPA_LEET)
     # Quitar acentos (á -> a) pero conservar la ñ
@@ -208,6 +228,11 @@ def buscar_groseria(texto: str):
                 variante, [_normalizar(f) for f in _FRASES_DENIGRANTES])
             if frase_d:
                 return f"discurso de odio ({g.group(1)} + {frase_d})"
+    # 4ª capa: better-profanity sobre el texto ya normalizado (sin acentos ni
+    # leet), así atrapa las evasiones que el resto del pipeline ya desarmó.
+    normal = _normalizar(texto)
+    if profanity.contains_profanity(normal):
+        return "profanity"
     return None
 
 

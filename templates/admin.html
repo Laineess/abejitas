@@ -73,10 +73,37 @@
           {{ 'ACTIVADOS' if activado else 'DESACTIVADOS' }}
         </span>
       </div>
-      <form method="post" action="{{ url_for('admin_toggle') }}">
+      <form method="post" action="{{ url_for('admin_toggle', clave='mostrar_mensajes') }}">
         <button type="submit" class="{{ 'rojo' if activado else '' }}">
           {{ 'Desactivar' if activado else 'Activar' }}
         </button>
+      </form>
+    </div>
+
+    <div class="tarjeta estado">
+      <div>
+        Audio de los mensajes:
+        <span class="badge {{ 'on' if audio else 'off' }}">
+          {{ 'ACTIVADO' if audio else 'DESACTIVADO' }}
+        </span>
+      </div>
+      <form method="post" action="{{ url_for('admin_toggle', clave='audio') }}">
+        <button type="submit" class="{{ 'rojo' if audio else '' }}">
+          {{ 'Silenciar' if audio else 'Activar' }}
+        </button>
+      </form>
+    </div>
+
+    <div class="tarjeta estado">
+      <div>
+        Modo prueba:
+        <small style="color:#7d8fa5;">envía mensajes simultáneos a la pantalla</small>
+      </div>
+      <form method="post" action="{{ url_for('admin_prueba') }}"
+            style="display:flex; gap:8px; align-items:center;">
+        <input type="number" name="cantidad" value="6" min="1" max="12"
+               style="width:64px; padding:12px; border-radius:10px; border:none; font-size:16px;">
+        <button type="submit">Enviar</button>
       </form>
     </div>
 
