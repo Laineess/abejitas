@@ -1,24 +1,39 @@
+# -*- coding: utf-8 -*-
+"""AWS Students Builder — muro de mensajes en vivo.
+
+Sin base de datos: los mensajes aprobados NO se guardan, se transmiten en
+tiempo real a la(s) pantalla(s) por WebSocket (flask-sock). Solo se conserva
+en memoria un búfer de los más recientes (se pierde al reiniciar), suficiente
+para el panel de admin. El texto llega y sale siempre como Unicode/UTF-8.
+"""
+
 import io
+import json
 import os
-import sqlite3
+import queue
+import threading
 import time
+from collections import deque
 
 import qrcode
-from flask import (Flask, g, jsonify, redirect, render_template, request,
+from flask import (Flask, jsonify, redirect, render_template, request,
                    send_file, session, url_for)
 from flask_socketio import SocketIO
 
 from moderacion import buscar_groseria, solo_texto
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "mensajes.db")
 
 COOLDOWN = 10
 MAX_CARACTERES = 100
+MAX_RECIENTES = 50   # cuántos mensajes recientes se guardan en memoria
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+# jsonify sin escapar acentos/emojis (respuesta UTF-8 legible)
+app.json.ensure_ascii = False
 app.secret_key = os.environ.get("SECRET_KEY", "cambia-esta-clave-en-produccion")
+sock = Sock(app)
 
 # async_mode="threading": sin eventlet/gevent, corre sobre el mismo servidor.
 # Suficiente para una pantalla; para muchos clientes tocaría un worker async.
@@ -27,26 +42,30 @@ socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 # Contraseña del panel de admin (cámbiala con la variable de entorno)
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "abejas2026")
 
-# Cooldown en memoria: ip -> timestamp del último envío
-_ultimo_envio = {}
+# ------------------------------------------------------------- estado en memoria
+_lock = threading.Lock()
+_mensajes = deque(maxlen=MAX_RECIENTES)   # recientes: {"id": int, "texto": str}
+_siguiente_id = 1
+_mostrar = True                            # ¿se muestran los mensajes en pantalla?
+_clientes = set()                          # colas de las pantallas conectadas por WS
+_ultimo_envio = {}                         # cooldown: ip -> timestamp del último envío
 
 
-# ---------------------------------------------------------------- base de datos
-
-def get_db():
-    db = getattr(g, "_db", None)
-    if db is None:
-        db = g._db = sqlite3.connect(DB_PATH)
-        db.row_factory = sqlite3.Row
-    return db
+def ip_cliente() -> str:
+    # Detrás de un proxy/balanceador llega en X-Forwarded-For
+    xff = request.headers.get("X-Forwarded-For", "")
+    return xff.split(",")[0].strip() if xff else (request.remote_addr or "?")
 
 
-@app.teardown_appcontext
-def cerrar_db(_exc):
-    db = getattr(g, "_db", None)
-    if db is not None:
-        db.close()
-
+def _difundir(evento: dict):
+    """Envía un evento JSON-serializable a todas las pantallas conectadas."""
+    with _lock:
+        clientes = list(_clientes)
+    for cola in clientes:
+        try:
+            cola.put(evento)
+        except Exception:
+            pass
 
 def init_db():
     con = sqlite3.connect(DB_PATH)
@@ -66,6 +85,7 @@ def init_db():
     con.commit()
     con.close()
 
+# --------------------------------------------------------------- WebSocket
 
 # Flags on/off del panel. Whitelist: solo estas claves se pueden alternar.
 FLAGS = {"mostrar_mensajes", "audio"}
@@ -76,6 +96,9 @@ def flag(clave: str) -> bool:
         "SELECT valor FROM config WHERE clave = ?", (clave,)).fetchone()
     return fila is not None and fila["valor"] == "1"
 
+    with _lock:
+        _clientes.add(cola)
+        estado_inicial = {"tipo": "estado", "activado": _mostrar}
 
 def set_flag(clave: str, activado: bool):
     db = get_db()
@@ -122,7 +145,7 @@ def recibir_mensaje():
     ip = ip_cliente()
     ahora = time.time()
 
-    # Cooldown de 10 segundos por visitante
+    # Cooldown por visitante
     transcurrido = ahora - _ultimo_envio.get(ip, 0)
     if transcurrido < COOLDOWN:
         restante = int(COOLDOWN - transcurrido) + 1
@@ -139,8 +162,7 @@ def recibir_mensaje():
 
     groseria = buscar_groseria(texto)
     if groseria:
-        # Cuenta como intento: también consume el cooldown
-        _ultimo_envio[ip] = ahora
+        _ultimo_envio[ip] = ahora            # el intento también consume cooldown
         app.logger.warning("Mensaje rechazado de %s (palabra: %s)", ip, groseria)
         return jsonify(ok=False, error="groseria",
                        mensaje="⚠️ Tu mensaje contiene lenguaje ofensivo y no será "
@@ -157,6 +179,8 @@ def recibir_mensaje():
     return jsonify(ok=True,
                    mensaje="¡Gracias! Una abejita llevará tu mensaje a la pantalla. 🐝"), 201
 
+    if mostrar:
+        _difundir({"tipo": "mensaje", "id": msg["id"], "texto": texto})
 
 @app.route("/api/estado")
 def estado():
@@ -191,8 +215,9 @@ def admin():
     if not session.get("admin"):
         return render_template("admin.html", autenticado=False, error=None)
 
-    ultimos = get_db().execute(
-        "SELECT id, texto, creado FROM mensajes ORDER BY id DESC LIMIT 20").fetchall()
+    with _lock:
+        recientes = list(_mensajes)[-20:][::-1]
+        activado = _mostrar
     return render_template("admin.html", autenticado=True, error=None,
                            activado=flag("mostrar_mensajes"),
                            audio=flag("audio"), mensajes=ultimos)
@@ -227,8 +252,6 @@ def admin_logout():
     session.pop("admin", None)
     return redirect(url_for("admin"))
 
-
-init_db()
 
 if __name__ == "__main__":
     puerto = int(os.environ.get("PORT", 8080))
