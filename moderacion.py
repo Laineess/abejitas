@@ -1,16 +1,22 @@
 # -*- coding: utf-8 -*-
-"""Moderación de mensajes basada en la librería spanlp.
+"""Moderación de mensajes en español e inglés.
 
-Sustituye al diccionario manual anterior. spanlp trae su propio corpus de
-groserías por país (21 países hispanohablantes), así que aquí solo se
-configura y se normaliza el texto de entrada para atrapar evasiones
-(acentos, may/min, puntuación intercalada, "leet speak" y erratas).
+El texto de entrada se normaliza para atrapar evasiones (acentos, may/min,
+"leet speak" y letras separadas) y luego pasa por cuatro capas:
+
+    1. raíces      — palabras que EMPIEZAN por una raíz ofensiva
+    2. exactas     — palabras completas (donde el prefijo daría falsos positivos)
+    3. frases      — groserías de varias palabras
+    4. odio        — grupo protegido + expresión denigrante
+    5. profanity   — better-profanity, para el inglés que no cubren las listas
 
 API pública (la que consume app.py):
     buscar_groseria(texto) -> str | None   palabra detectada o None
     es_limpio(texto)       -> bool
+    solo_texto(texto)      -> str          sin emojis ni símbolos
 """
 
+import re
 import unicodedata
 
 from better_profanity import profanity  # 4ª capa: palabrotas en inglés
@@ -45,30 +51,44 @@ RAICES = [
     "bastard", "dickhead",
 ]
 
-# --------------------------------------------------------------------- config
-
-# Todos los países hispanohablantes que soporta spanlp.
-_PAISES = list(Country)
-
-# Términos frecuentes que el corpus de spanlp no trae y conviene añadir.
-# (Es una lista MÍNIMA, no el diccionario gigante anterior.)
-_INCLUIR = [
-    "no mames", "conchetumare", "conchesumadre", "csm", "ctm", "qliao",
-    "hijueputa", "malparido", "verga", "pendejada",
+# ----------------------------------------------------------------- capa 2
+# Palabras completas: buscarlas por prefijo daría falsos positivos
+# ("ano" bloquearía "anotar", "sexo" bloquearía "sexto").
+EXACTAS = [
+    "sexo", "semen", "pene", "vagina", "teta", "tetas", "chichis",
+    "zorra", "zorras", "perra", "perras", "coger", "cojer", "nepe",
+    "csm", "ctm", "qliao", "wtf", "stfu",
 ]
 
-# Palabras que spanlp podría marcar y aquí queremos permitir (falsos
-# positivos). Vacío por ahora; agregar aquí si aparece alguno.
-_EXCLUIR = []
+# ----------------------------------------------------------------- capa 3
+# Groserías de varias palabras (las de una sola ya las cubren las raíces).
+FRASES = [
+    "no mames", "no manches", "hijo de puta", "hija de puta",
+    "chinga tu madre", "chinga a tu madre", "vete a la mierda",
+    "la concha de tu madre", "conchetumare", "conchesumadre",
+    "me vale verga", "puta madre", "hijo de perra", "vete al carajo",
+]
 
-# Detector principal. distance_metric=Jaccard atrapa erratas leves
-# ("pvta" ~ "puta") sin necesidad de listarlas.
-_detector = Palabrota(
-    countries=_PAISES,
-    include=_INCLUIR,
-    exclude=_EXCLUIR,
-    distance_metric=JaccardIndex(threshold=0.8),
-)
+# ----------------------------------------------------------------- capa 4
+# Discurso de odio: solo se bloquea si aparece un grupo protegido JUNTO a
+# una expresión denigrante. Por separado son palabras legítimas.
+GRUPOS = [
+    "judio", "judia", "gay", "lesbian", "homosexual", "trans", "travesti",
+    "indigen", "migrant", "inmigrant", "musulman", "gitan", "sudaca",
+    "discapacitad", "negro", "negra", "chino", "china", "boliviano",
+    "peruano", "haitiano", "venezolano", "mexicano",
+]
+
+DENIGRANTES = [
+    "asqueros", "repugnant", "inferior", "subhuman", "infrahuman",
+    "plaga", "lacra", "escoria", "apestan", "estorban", "parasit",
+]
+
+FRASES_DENIGRANTES = [
+    "deberian morir", "no deberian existir", "hay que matar",
+    "fuera de mi pais", "no merecen vivir", "muerte a los",
+    "son una plaga", "que se mueran",
+]
 
 # Sustitución "leet"/fonética para evasiones: put0 -> puto, pv7a -> puta.
 _MAPA_LEET = str.maketrans({
@@ -112,12 +132,17 @@ def solo_texto(texto: str) -> str:
     return re.sub(r"\s+", " ", limpio).strip()
 
 
-def _normalizar(texto: str) -> str:
-    texto = texto.lower().translate(_MAPA_LEET)
-    # Quitar acentos (á -> a) pero conservar la ñ
-    texto = texto.replace("ñ", "\x00")
+def _sin_acentos(texto: str) -> str:
+    """Quita acentos (á -> a) pero conserva la ñ."""
+    texto = texto.replace("ñ", "\x00").replace("Ñ", "\x00")
     texto = unicodedata.normalize("NFD", texto)
-    return "".join(c for c in texto if not unicodedata.combining(c))
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    return texto.replace("\x00", "ñ")
+
+
+def _normalizar(texto: str) -> str:
+    """Minúsculas, sin acentos y con la sustitución leet aplicada."""
+    return _sin_acentos(_asegurar_texto(texto).lower()).translate(_MAPA_LEET)
 
 
 def _variantes(texto: str):
@@ -130,6 +155,33 @@ def _variantes(texto: str):
         leet.replace(" ", ""),   # "p u t o" -> "puto"
     }
     return [f for f in formas if f.strip()]
+
+
+def _contiene_frase(texto: str, frases):
+    """Devuelve la primera frase de la lista contenida en el texto, o None."""
+    for frase in frases:
+        if frase and frase in texto:
+            return frase
+    return None
+
+
+# ------------------------------------------------------- expresiones regulares
+# Se compilan una sola vez al importar. Las raíces se ordenan de más larga a
+# más corta para que el grupo capturado sea la coincidencia más específica.
+
+def _alternancia(palabras):
+    return "|".join(re.escape(p) for p in sorted(set(palabras), key=len, reverse=True))
+
+
+# Raíz al principio de palabra: "put" atrapa "puto", "putazo", "putiza".
+_RE_RAICES = re.compile(rf"\b({_alternancia(RAICES)}\w*)", re.UNICODE)
+# Palabra completa: no atrapa prefijos.
+_RE_EXACTAS = re.compile(rf"\b({_alternancia(EXACTAS)})\b", re.UNICODE)
+_RE_GRUPOS = re.compile(rf"\b({_alternancia(GRUPOS)}\w*)", re.UNICODE)
+_RE_DENIGRANTES = re.compile(rf"\b({_alternancia(DENIGRANTES)}\w*)", re.UNICODE)
+
+_FRASES_NORM = [_normalizar(f) for f in FRASES]
+_FRASES_DENIGRANTES_NORM = [_normalizar(f) for f in FRASES_DENIGRANTES]
 
 
 # ------------------------------------------------------------- API pública
@@ -152,14 +204,13 @@ def buscar_groseria(texto: str):
             d = _RE_DENIGRANTES.search(variante)
             if d:
                 return f"discurso de odio ({g.group(1)} + {d.group(1)})"
-            frase_d = _contiene_frase(
-                variante, [_normalizar(f) for f in _FRASES_DENIGRANTES])
+            frase_d = _contiene_frase(variante, _FRASES_DENIGRANTES_NORM)
             if frase_d:
                 return f"discurso de odio ({g.group(1)} + {frase_d})"
-    # 4ª capa: better-profanity sobre el texto ya normalizado (sin acentos ni
-    # leet), así atrapa las evasiones que el resto del pipeline ya desarmó.
-    normal = _normalizar(texto)
-    if profanity.contains_profanity(normal):
+    # Última capa: better-profanity sobre el texto en minúsculas y sin acentos.
+    # No se le pasa la variante leet a propósito: el mapa convierte k -> c, lo
+    # que rompería palabras inglesas del corpus ("jerk" -> "jerc").
+    if profanity.contains_profanity(_sin_acentos(_asegurar_texto(texto).lower())):
         return "profanity"
     return None
 
