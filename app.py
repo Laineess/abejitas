@@ -2,15 +2,15 @@
 """AWS Students Builder — muro de mensajes en vivo.
 
 Sin base de datos: los mensajes aprobados NO se guardan, se transmiten en
-tiempo real a la(s) pantalla(s) por WebSocket (flask-sock). Solo se conserva
-en memoria un búfer de los más recientes (se pierde al reiniciar), suficiente
-para el panel de admin. El texto llega y sale siempre como Unicode/UTF-8.
+tiempo real a la(s) pantalla(s) por WebSocket (flask-socketio). Solo se
+conserva en memoria un búfer de los más recientes (se pierde al reiniciar),
+suficiente para el panel de admin. El texto llega y sale siempre como
+Unicode/UTF-8.
 """
 
 import io
-import json
 import os
-import queue
+import socket
 import threading
 import time
 from collections import deque
@@ -33,7 +33,6 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 # jsonify sin escapar acentos/emojis (respuesta UTF-8 legible)
 app.json.ensure_ascii = False
 app.secret_key = os.environ.get("SECRET_KEY", "cambia-esta-clave-en-produccion")
-sock = Sock(app)
 
 # async_mode="threading": sin eventlet/gevent, corre sobre el mismo servidor.
 # Suficiente para una pantalla; para muchos clientes tocaría un worker async.
@@ -43,11 +42,13 @@ socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "abejas2026")
 
 # ------------------------------------------------------------- estado en memoria
+# Flags on/off del panel. Whitelist: solo estas claves se pueden alternar.
+FLAGS = {"mostrar_mensajes", "audio"}
+
 _lock = threading.Lock()
 _mensajes = deque(maxlen=MAX_RECIENTES)   # recientes: {"id": int, "texto": str}
 _siguiente_id = 1
-_mostrar = True                            # ¿se muestran los mensajes en pantalla?
-_clientes = set()                          # colas de las pantallas conectadas por WS
+_flags = {"mostrar_mensajes": True, "audio": True}
 _ultimo_envio = {}                         # cooldown: ip -> timestamp del último envío
 
 
@@ -57,60 +58,24 @@ def ip_cliente() -> str:
     return xff.split(",")[0].strip() if xff else (request.remote_addr or "?")
 
 
-def _difundir(evento: dict):
-    """Envía un evento JSON-serializable a todas las pantallas conectadas."""
-    with _lock:
-        clientes = list(_clientes)
-    for cola in clientes:
-        try:
-            cola.put(evento)
-        except Exception:
-            pass
-
-def init_db():
-    con = sqlite3.connect(DB_PATH)
-    con.executescript("""
-        CREATE TABLE IF NOT EXISTS mensajes (
-            id     INTEGER PRIMARY KEY AUTOINCREMENT,
-            texto  TEXT NOT NULL,
-            creado REAL NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS config (
-            clave TEXT PRIMARY KEY,
-            valor TEXT NOT NULL
-        );
-        INSERT OR IGNORE INTO config (clave, valor) VALUES ('mostrar_mensajes', '1');
-        INSERT OR IGNORE INTO config (clave, valor) VALUES ('audio', '1');
-    """)
-    con.commit()
-    con.close()
-
-# --------------------------------------------------------------- WebSocket
-
-# Flags on/off del panel. Whitelist: solo estas claves se pueden alternar.
-FLAGS = {"mostrar_mensajes", "audio"}
-
-
 def flag(clave: str) -> bool:
-    fila = get_db().execute(
-        "SELECT valor FROM config WHERE clave = ?", (clave,)).fetchone()
-    return fila is not None and fila["valor"] == "1"
-
     with _lock:
-        _clientes.add(cola)
-        estado_inicial = {"tipo": "estado", "activado": _mostrar}
+        return _flags.get(clave, False)
+
 
 def set_flag(clave: str, activado: bool):
-    db = get_db()
-    db.execute("UPDATE config SET valor = ? WHERE clave = ?",
-               ("1" if activado else "0", clave))
-    db.commit()
+    with _lock:
+        _flags[clave] = bool(activado)
 
 
-def ip_cliente() -> str:
-    # Detrás de un proxy/balanceador llega en X-Forwarded-For
-    xff = request.headers.get("X-Forwarded-For", "")
-    return xff.split(",")[0].strip() if xff else (request.remote_addr or "?")
+def guardar_mensaje(texto: str) -> dict:
+    """Registra el mensaje en el búfer en memoria y devuelve {'id', 'texto'}."""
+    global _siguiente_id
+    with _lock:
+        mensaje = {"id": _siguiente_id, "texto": texto}
+        _siguiente_id += 1
+        _mensajes.append(mensaje)
+    return mensaje
 
 
 # --------------------------------------------------------------------- páginas
@@ -169,36 +134,31 @@ def recibir_mensaje():
                                "mostrado. Recuerda ser respetuoso. 🐝"), 400
 
     _ultimo_envio[ip] = ahora
-    db = get_db()
-    cur = db.execute("INSERT INTO mensajes (texto, creado) VALUES (?, ?)",
-                     (texto, ahora))
-    db.commit()
+    mensaje = guardar_mensaje(texto)
     # Empuja el mensaje a la pantalla en tiempo real (solo si está activada)
     if flag("mostrar_mensajes"):
-        socketio.emit("mensaje", {"id": cur.lastrowid, "texto": texto})
+        socketio.emit("mensaje", mensaje)
     return jsonify(ok=True,
                    mensaje="¡Gracias! Una abejita llevará tu mensaje a la pantalla. 🐝"), 201
 
-    if mostrar:
-        _difundir({"tipo": "mensaje", "id": msg["id"], "texto": texto})
 
 @app.route("/api/estado")
 def estado():
-    fila = get_db().execute("SELECT MAX(id) AS ultimo FROM mensajes").fetchone()
+    with _lock:
+        ultimo_id = _mensajes[-1]["id"] if _mensajes else 0
     return jsonify(activado=flag("mostrar_mensajes"), audio=flag("audio"),
-                   ultimo_id=fila["ultimo"] or 0)
+                   ultimo_id=ultimo_id)
 
 
 @app.route("/api/nuevos")
 def nuevos():
+    """Respaldo por polling para pantallas sin WebSocket."""
     if not flag("mostrar_mensajes"):
         return jsonify(activado=False, audio=flag("audio"), mensajes=[])
     after = request.args.get("after", 0, type=int)
-    filas = get_db().execute(
-        "SELECT id, texto FROM mensajes WHERE id > ? ORDER BY id LIMIT 10",
-        (after,)).fetchall()
-    return jsonify(activado=True, audio=flag("audio"),
-                   mensajes=[{"id": f["id"], "texto": f["texto"]} for f in filas])
+    with _lock:
+        nuevos = [m for m in _mensajes if m["id"] > after][:10]
+    return jsonify(activado=True, audio=flag("audio"), mensajes=nuevos)
 
 
 # ----------------------------------------------------------------------- admin
@@ -217,10 +177,9 @@ def admin():
 
     with _lock:
         recientes = list(_mensajes)[-20:][::-1]
-        activado = _mostrar
     return render_template("admin.html", autenticado=True, error=None,
                            activado=flag("mostrar_mensajes"),
-                           audio=flag("audio"), mensajes=ultimos)
+                           audio=flag("audio"), mensajes=recientes)
 
 
 @app.route("/admin/toggle/<clave>", methods=["POST"])
@@ -254,7 +213,22 @@ def admin_logout():
 
 
 if __name__ == "__main__":
-    puerto = int(os.environ.get("PORT", 8080))
+    # 8000 y no 8080: ese puerto lo suelen ocupar Tomcat, XAMPP o Jenkins.
+    # Para usar otro:  PORT=5050 python app.py
+    puerto = int(os.environ.get("PORT", 8000))
+
+    # Se comprueba el puerto antes de arrancar: si está ocupado, Werkzeug
+    # imprime un error del sistema poco claro y sale, así que lo avisamos aquí.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as prueba:
+        try:
+            prueba.bind(("0.0.0.0", puerto))
+        except OSError as err:
+            print(f"\nNo se pudo abrir el puerto {puerto}: {err}\n"
+                  f"Otro programa lo está usando. Arranca en otro puerto con:\n"
+                  f"    $env:PORT={puerto + 1}; python app.py   (PowerShell)\n"
+                  f"    PORT={puerto + 1} python app.py         (bash)\n")
+            raise SystemExit(1)
+
     # allow_unsafe_werkzeug: usamos el server de Werkzeug a propósito (expo,
     # una pantalla). Para producción real, un worker async + gunicorn.
     socketio.run(app, host="0.0.0.0", port=puerto,
