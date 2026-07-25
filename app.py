@@ -18,9 +18,9 @@ from collections import deque
 import qrcode
 from flask import (Flask, jsonify, redirect, render_template, request,
                    send_file, session, url_for)
-from flask_sock import Sock
+from flask_socketio import SocketIO
 
-from moderacion import buscar_groseria
+from moderacion import buscar_groseria, solo_texto
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -34,6 +34,10 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.json.ensure_ascii = False
 app.secret_key = os.environ.get("SECRET_KEY", "cambia-esta-clave-en-produccion")
 sock = Sock(app)
+
+# async_mode="threading": sin eventlet/gevent, corre sobre el mismo servidor.
+# Suficiente para una pantalla; para muchos clientes tocaría un worker async.
+socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 
 # Contraseña del panel de admin (cámbiala con la variable de entorno)
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "abejas2026")
@@ -63,31 +67,50 @@ def _difundir(evento: dict):
         except Exception:
             pass
 
+def init_db():
+    con = sqlite3.connect(DB_PATH)
+    con.executescript("""
+        CREATE TABLE IF NOT EXISTS mensajes (
+            id     INTEGER PRIMARY KEY AUTOINCREMENT,
+            texto  TEXT NOT NULL,
+            creado REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS config (
+            clave TEXT PRIMARY KEY,
+            valor TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO config (clave, valor) VALUES ('mostrar_mensajes', '1');
+        INSERT OR IGNORE INTO config (clave, valor) VALUES ('audio', '1');
+    """)
+    con.commit()
+    con.close()
 
 # --------------------------------------------------------------- WebSocket
 
-@sock.route("/ws")
-def ws_pantalla(ws):
-    """Canal de solo salida: la pantalla recibe estado y mensajes nuevos."""
-    cola = queue.SimpleQueue()
+# Flags on/off del panel. Whitelist: solo estas claves se pueden alternar.
+FLAGS = {"mostrar_mensajes", "audio"}
+
+
+def flag(clave: str) -> bool:
+    fila = get_db().execute(
+        "SELECT valor FROM config WHERE clave = ?", (clave,)).fetchone()
+    return fila is not None and fila["valor"] == "1"
 
     with _lock:
         _clientes.add(cola)
         estado_inicial = {"tipo": "estado", "activado": _mostrar}
 
-    ws.send(json.dumps(estado_inicial))
-    try:
-        while True:
-            try:
-                evento = cola.get(timeout=25)
-            except queue.Empty:
-                evento = {"tipo": "ping"}     # latido para detectar desconexión
-            ws.send(json.dumps(evento))
-    except Exception:
-        pass                                  # cliente cerró la conexión
-    finally:
-        with _lock:
-            _clientes.discard(cola)
+def set_flag(clave: str, activado: bool):
+    db = get_db()
+    db.execute("UPDATE config SET valor = ? WHERE clave = ?",
+               ("1" if activado else "0", clave))
+    db.commit()
+
+
+def ip_cliente() -> str:
+    # Detrás de un proxy/balanceador llega en X-Forwarded-For
+    xff = request.headers.get("X-Forwarded-For", "")
+    return xff.split(",")[0].strip() if xff else (request.remote_addr or "?")
 
 
 # --------------------------------------------------------------------- páginas
@@ -117,7 +140,8 @@ def qr_png():
 @app.route("/api/mensaje", methods=["POST"])
 def recibir_mensaje():
     datos = request.get_json(silent=True) or {}
-    texto = (datos.get("texto") or "").strip()
+    # Solo texto: se descartan emojis y símbolos antes de todo lo demás
+    texto = solo_texto((datos.get("texto") or ""))
     ip = ip_cliente()
     ahora = time.time()
 
@@ -130,7 +154,7 @@ def recibir_mensaje():
 
     if not texto:
         return jsonify(ok=False, error="vacio",
-                       mensaje="Escribe un mensaje antes de enviar."), 400
+                       mensaje="Escribe un mensaje de texto (sin solo emojis)."), 400
 
     if len(texto) > MAX_CARACTERES:
         return jsonify(ok=False, error="longitud",
@@ -145,18 +169,36 @@ def recibir_mensaje():
                                "mostrado. Recuerda ser respetuoso. 🐝"), 400
 
     _ultimo_envio[ip] = ahora
-    global _siguiente_id
-    with _lock:
-        msg = {"id": _siguiente_id, "texto": texto}
-        _siguiente_id += 1
-        _mensajes.append(msg)
-        mostrar = _mostrar
+    db = get_db()
+    cur = db.execute("INSERT INTO mensajes (texto, creado) VALUES (?, ?)",
+                     (texto, ahora))
+    db.commit()
+    # Empuja el mensaje a la pantalla en tiempo real (solo si está activada)
+    if flag("mostrar_mensajes"):
+        socketio.emit("mensaje", {"id": cur.lastrowid, "texto": texto})
+    return jsonify(ok=True,
+                   mensaje="¡Gracias! Una abejita llevará tu mensaje a la pantalla. 🐝"), 201
 
     if mostrar:
         _difundir({"tipo": "mensaje", "id": msg["id"], "texto": texto})
 
-    return jsonify(ok=True,
-                   mensaje="¡Gracias! Una abejita llevará tu mensaje a la pantalla. 🐝"), 201
+@app.route("/api/estado")
+def estado():
+    fila = get_db().execute("SELECT MAX(id) AS ultimo FROM mensajes").fetchone()
+    return jsonify(activado=flag("mostrar_mensajes"), audio=flag("audio"),
+                   ultimo_id=fila["ultimo"] or 0)
+
+
+@app.route("/api/nuevos")
+def nuevos():
+    if not flag("mostrar_mensajes"):
+        return jsonify(activado=False, audio=flag("audio"), mensajes=[])
+    after = request.args.get("after", 0, type=int)
+    filas = get_db().execute(
+        "SELECT id, texto FROM mensajes WHERE id > ? ORDER BY id LIMIT 10",
+        (after,)).fetchall()
+    return jsonify(activado=True, audio=flag("audio"),
+                   mensajes=[{"id": f["id"], "texto": f["texto"]} for f in filas])
 
 
 # ----------------------------------------------------------------------- admin
@@ -177,18 +219,31 @@ def admin():
         recientes = list(_mensajes)[-20:][::-1]
         activado = _mostrar
     return render_template("admin.html", autenticado=True, error=None,
-                           activado=activado, mensajes=recientes)
+                           activado=flag("mostrar_mensajes"),
+                           audio=flag("audio"), mensajes=ultimos)
 
 
-@app.route("/admin/toggle", methods=["POST"])
-def admin_toggle():
+@app.route("/admin/toggle/<clave>", methods=["POST"])
+def admin_toggle(clave):
     if not session.get("admin"):
         return redirect(url_for("admin"))
-    global _mostrar
-    with _lock:
-        _mostrar = not _mostrar
-        activado = _mostrar
-    _difundir({"tipo": "estado", "activado": activado})
+    if clave in FLAGS:
+        set_flag(clave, not flag(clave))
+        # Empuja el nuevo estado a la pantalla al instante (mensajes / audio)
+        socketio.emit("config", {"activado": flag("mostrar_mensajes"),
+                                  "audio": flag("audio")})
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/prueba", methods=["POST"])
+def admin_prueba():
+    if not session.get("admin"):
+        return redirect(url_for("admin"))
+    # Inyecta N mensajes de golpe para ver varias abejas hablando a la vez.
+    # No se guardan en la DB (son de prueba): solo se empujan por socket.
+    n = max(1, min(12, request.form.get("cantidad", 6, type=int)))
+    for i in range(1, n + 1):
+        socketio.emit("mensaje", {"id": -i, "texto": f"Mensaje de prueba {i}"})
     return redirect(url_for("admin"))
 
 
@@ -200,5 +255,7 @@ def admin_logout():
 
 if __name__ == "__main__":
     puerto = int(os.environ.get("PORT", 8080))
-    # threaded=True: atiende WebSockets y HTTP a la vez con el servidor de dev
-    app.run(host="0.0.0.0", port=puerto, threaded=True)
+    # allow_unsafe_werkzeug: usamos el server de Werkzeug a propósito (expo,
+    # una pantalla). Para producción real, un worker async + gunicorn.
+    socketio.run(app, host="0.0.0.0", port=puerto,
+                 allow_unsafe_werkzeug=True)

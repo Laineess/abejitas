@@ -13,9 +13,37 @@ API pública (la que consume app.py):
 
 import unicodedata
 
-from spanlp.palabrota import Palabrota
-from spanlp.domain.countries import Country
-from spanlp.domain.strategies import JaccardIndex
+from better_profanity import profanity  # 4ª capa: palabrotas en inglés
+
+profanity.load_censor_words()
+
+# ----------------------------------------------------------------- capa 1
+# Raíces: se bloquea cualquier palabra que EMPIECE con ellas.
+# Elegidas para no chocar con palabras normales (no "verg" porque
+# bloquearía "vergüenza"; no "mens" porque bloquearía "mensaje").
+RAICES = [
+    # español — groserías y sexuales
+    "put", "pendej", "ching", "verga", "vergaz", "verguiz", "vrga",
+    "mierd", "miard", "cabron", "culer", "culo", "caga", "cago", "cague",
+    "mamad", "mamon", "mames", "mamast", "chupam", "chupal",
+    "joto", "jotol", "jotit", "maric", "pito", "pija", "pijud",
+    "panoch", "polla", "ojete", "nalg", "huevon", "guevon", "webon",
+    "wevon", "puñet", "punet", "puñal", "punal", "piruj", "prostitut",
+    "ramera", "gilipoll", "bolud", "pelotud", "conchud", "malparid",
+    "hijueput", "hijodeput", "gonorre", "marran", "carajo", "joder",
+    "jodid", "jodet", "coño", "cojon", "cojud", "carech", "chimb",
+    "pichul", "pinch", "wil", "guil", "verguer", "madraz", "madread",
+    "madrear", "putiz", "cerd",
+    # español — insultos
+    "estupid", "imbecil", "idiot", "tarad", "babos", "zopenc",
+    "mongol", "retrasad", "subnormal", "machorr", "lenchon", "invertid",
+    "patarajad", "mugros", "zarrapastros", "escori",
+    # inglés
+    "fuck", "fuk", "fck", "fucc", "shit", "bitch", "asshole", "ashole",
+    "motherfuck", "mothafuck", "cunt", "nigg", "fagg", "whore", "slut",
+    "retard", "dumbass", "jackass", "douche", "wank", "twat", "pussy",
+    "bastard", "dickhead",
+]
 
 # --------------------------------------------------------------------- config
 
@@ -68,7 +96,26 @@ def _asegurar_texto(valor) -> str:
     return "".join(c for c in valor if c == "\n" or not unicodedata.category(c).startswith("C"))
 
 
-def _sin_acentos(texto: str) -> str:
+def solo_texto(texto: str) -> str:
+    """Quita emojis y símbolos: deja letras, números, espacios y puntuación.
+
+    Se rechazan las categorías Unicode de símbolo (S*) y de control/formato
+    (C*, incluye ZWJ y selectores de variación de los emojis). Conserva
+    acentos, ñ y signos normales (¿ ¡ ? ! , . …).
+    """
+    limpio = "".join(
+        c for c in texto
+        if unicodedata.category(c)[0] not in ("S", "C")
+        and not 0xFE00 <= ord(c) <= 0xFE0F   # selectores de variación de emoji
+        or c in "\t\n"
+    )
+    return re.sub(r"\s+", " ", limpio).strip()
+
+
+def _normalizar(texto: str) -> str:
+    texto = texto.lower().translate(_MAPA_LEET)
+    # Quitar acentos (á -> a) pero conservar la ñ
+    texto = texto.replace("ñ", "\x00")
     texto = unicodedata.normalize("NFD", texto)
     return "".join(c for c in texto if not unicodedata.combining(c))
 
@@ -90,12 +137,30 @@ def _variantes(texto: str):
 def buscar_groseria(texto: str):
     """Devuelve la palabra ofensiva detectada, o None si el texto es limpio."""
     for variante in _variantes(texto):
-        if _detector.contains_palabrota(variante):
-            # Intentar identificar la palabra concreta para el log.
-            for token in variante.split():
-                if _detector.contains_palabrota(token):
-                    return token
-            return "lenguaje ofensivo"
+        m = _RE_RAICES.search(variante)
+        if m:
+            return m.group(1)
+        m = _RE_EXACTAS.search(variante)
+        if m:
+            return m.group(1)
+        frase = _contiene_frase(variante, _FRASES_NORM)
+        if frase:
+            return frase
+        # Discurso de odio: grupo protegido + expresión denigrante
+        g = _RE_GRUPOS.search(variante)
+        if g:
+            d = _RE_DENIGRANTES.search(variante)
+            if d:
+                return f"discurso de odio ({g.group(1)} + {d.group(1)})"
+            frase_d = _contiene_frase(
+                variante, [_normalizar(f) for f in _FRASES_DENIGRANTES])
+            if frase_d:
+                return f"discurso de odio ({g.group(1)} + {frase_d})"
+    # 4ª capa: better-profanity sobre el texto ya normalizado (sin acentos ni
+    # leet), así atrapa las evasiones que el resto del pipeline ya desarmó.
+    normal = _normalizar(texto)
+    if profanity.contains_profanity(normal):
+        return "profanity"
     return None
 
 
