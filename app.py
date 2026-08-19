@@ -9,6 +9,7 @@ Unicode/UTF-8.
 """
 
 import io
+import json
 import os
 import socket
 import threading
@@ -51,6 +52,29 @@ _siguiente_id = 1
 _flags = {"mostrar_mensajes": True, "audio": True}
 _ultimo_envio = {}                         # cooldown: ip -> timestamp del último envío
 
+# --------------------------------------------------------- ponentes (persistidos)
+PONENTES_FILE = os.path.join(BASE_DIR, "ponentes.json")
+
+
+def _cargar_ponentes() -> tuple[list, int | None]:
+    """Lee la lista de ponentes y el índice activo desde el JSON."""
+    try:
+        with open(PONENTES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("ponentes", []), data.get("activo")
+    except (FileNotFoundError, json.JSONDecodeError):
+        return [], None
+
+
+def _guardar_ponentes(ponentes: list, activo: int | None):
+    """Persiste la lista de ponentes y el índice activo al JSON."""
+    with open(PONENTES_FILE, "w", encoding="utf-8") as f:
+        json.dump({"ponentes": ponentes, "activo": activo},
+                  f, ensure_ascii=False, indent=2)
+
+
+_ponentes, _ponente_activo = _cargar_ponentes()
+
 
 def ip_cliente() -> str:
     # Detrás de un proxy/balanceador llega en X-Forwarded-For
@@ -88,6 +112,11 @@ def pantalla():
 @app.route("/mensaje")
 def pagina_mensaje():
     return render_template("mensaje.html", max_caracteres=MAX_CARACTERES)
+
+
+@app.route("/presentacion")
+def presentacion():
+    return render_template("presentacion.html")
 
 
 @app.route("/qr.png")
@@ -161,6 +190,15 @@ def nuevos():
     return jsonify(activado=True, audio=flag("audio"), mensajes=nuevos)
 
 
+@app.route("/api/ponente-activo")
+def ponente_activo():
+    """Devuelve el ponente que se está mostrando en /presentacion."""
+    with _lock:
+        if _ponente_activo is not None and _ponente_activo < len(_ponentes):
+            return jsonify(ponente=_ponentes[_ponente_activo])
+    return jsonify(ponente=None)
+
+
 # ----------------------------------------------------------------------- admin
 
 @app.route("/admin", methods=["GET", "POST"])
@@ -179,7 +217,9 @@ def admin():
         recientes = list(_mensajes)[-20:][::-1]
     return render_template("admin.html", autenticado=True, error=None,
                            activado=flag("mostrar_mensajes"),
-                           audio=flag("audio"), mensajes=recientes)
+                           audio=flag("audio"), mensajes=recientes,
+                           ponentes=_ponentes,
+                           ponente_activo=_ponente_activo)
 
 
 @app.route("/admin/toggle/<clave>", methods=["POST"])
@@ -206,6 +246,80 @@ def admin_prueba():
     return redirect(url_for("admin"))
 
 
+# --------------------------------------------------------- admin: ponentes
+
+def _emitir_ponente():
+    """Empuja el ponente activo (o None) a /presentacion vía Socket.IO."""
+    with _lock:
+        if _ponente_activo is not None and _ponente_activo < len(_ponentes):
+            socketio.emit("ponente", _ponentes[_ponente_activo])
+        else:
+            socketio.emit("ponente", None)
+
+
+@app.route("/admin/ponentes", methods=["POST"])
+def admin_agregar_ponente():
+    global _ponentes, _ponente_activo
+    if not session.get("admin"):
+        return redirect(url_for("admin"))
+    ponente = {
+        "nombre":    (request.form.get("nombre") or "").strip(),
+        "rol":       (request.form.get("rol") or "").strip(),
+        "tema":      (request.form.get("tema") or "").strip(),
+        "instagram": (request.form.get("instagram") or "").strip().lstrip("@"),
+        "linkedin":  (request.form.get("linkedin") or "").strip(),
+    }
+    if ponente["nombre"]:
+        with _lock:
+            _ponentes.append(ponente)
+            _guardar_ponentes(_ponentes, _ponente_activo)
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/ponentes/<int:idx>/activar", methods=["POST"])
+def admin_activar_ponente(idx):
+    global _ponente_activo
+    if not session.get("admin"):
+        return redirect(url_for("admin"))
+    with _lock:
+        if 0 <= idx < len(_ponentes):
+            _ponente_activo = idx
+            _guardar_ponentes(_ponentes, _ponente_activo)
+    _emitir_ponente()
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/ponentes/<int:idx>/eliminar", methods=["POST"])
+def admin_eliminar_ponente(idx):
+    global _ponentes, _ponente_activo
+    if not session.get("admin"):
+        return redirect(url_for("admin"))
+    with _lock:
+        if 0 <= idx < len(_ponentes):
+            _ponentes.pop(idx)
+            # Ajustar el índice activo tras la eliminación
+            if _ponente_activo is not None:
+                if idx == _ponente_activo:
+                    _ponente_activo = None
+                elif idx < _ponente_activo:
+                    _ponente_activo -= 1
+            _guardar_ponentes(_ponentes, _ponente_activo)
+    _emitir_ponente()
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/ponentes/limpiar", methods=["POST"])
+def admin_limpiar_ponente():
+    global _ponente_activo
+    if not session.get("admin"):
+        return redirect(url_for("admin"))
+    with _lock:
+        _ponente_activo = None
+        _guardar_ponentes(_ponentes, _ponente_activo)
+    _emitir_ponente()
+    return redirect(url_for("admin"))
+
+
 @app.route("/admin/logout", methods=["POST"])
 def admin_logout():
     session.pop("admin", None)
@@ -217,19 +331,9 @@ if __name__ == "__main__":
     # Para usar otro:  PORT=5050 python app.py
     puerto = int(os.environ.get("PORT", 8000))
 
-    # Se comprueba el puerto antes de arrancar: si está ocupado, Werkzeug
-    # imprime un error del sistema poco claro y sale, así que lo avisamos aquí.
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as prueba:
-        try:
-            prueba.bind(("0.0.0.0", puerto))
-        except OSError as err:
-            print(f"\nNo se pudo abrir el puerto {puerto}: {err}\n"
-                  f"Otro programa lo está usando. Arranca en otro puerto con:\n"
-                  f"    $env:PORT={puerto + 1}; python app.py   (PowerShell)\n"
-                  f"    PORT={puerto + 1} python app.py         (bash)\n")
-            raise SystemExit(1)
-
     # allow_unsafe_werkzeug: usamos el server de Werkzeug a propósito (expo,
     # una pantalla). Para producción real, un worker async + gunicorn.
+    # use_reloader: detecta cambios en .py y templates y reinicia solo.
     socketio.run(app, host="0.0.0.0", port=puerto,
+                 debug=True, use_reloader=True,
                  allow_unsafe_werkzeug=True)
