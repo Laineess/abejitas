@@ -6,15 +6,15 @@
 <title>Presentación — AWS Students Builder</title>
 <style>
   @font-face {
-    font-family: "Montserrat"; font-weight: 400; font-display: swap;
+    font-family: "Montserrat"; font-weight: 100; font-display: swap;
     src: url("{{ url_for('static', filename='montserrat-400.woff2') }}") format("woff2");
   }
   @font-face {
-    font-family: "Montserrat"; font-weight: 600; font-display: swap;
+    font-family: "Montserrat"; font-weight: 100; font-display: swap;
     src: url("{{ url_for('static', filename='montserrat-600.woff2') }}") format("woff2");
   }
   @font-face {
-    font-family: "Montserrat"; font-weight: 800; font-display: swap;
+    font-family: "Montserrat"; font-weight: 100; font-display: swap;
     src: url("{{ url_for('static', filename='montserrat-800.woff2') }}") format("woff2");
   }
 
@@ -155,11 +155,11 @@
   /* ── 1. TEMA PRINCIPAL CON TRANSICIÓN DINÁMICA ── */
   .topic-block {
     margin-bottom: clamp(24px, 4vh, 36px);
-    perspective: 1000px;
+    perspective: 500px;
   }
 
   .tema-title {
-    font-size: clamp(54px, 7.8vw, 104px);
+    font-size: clamp(54px, 7.8vw, 50px);
     font-weight: 800;
     line-height: 1.02;
     letter-spacing: -1.8px;
@@ -343,7 +343,7 @@
       <img class="logo-aws" src="{{ url_for('static', filename='aws-logo.png') }}" alt="AWS" onerror="this.style.display='none'">
       <div class="brand-divider"></div>
       <div class="brand-text-block">
-        <div class="brand-title">AWS Students Builder</div>
+        <div class="brand-title">AWS Students Builder Group</div>
         <div class="brand-subtitle">CUUT · UAEMex</div>
       </div>
     </div>
@@ -371,7 +371,7 @@
 
     <!-- Standby Mode (cuando no hay ponente activo) -->
     <main class="standby-content anim-out" id="heroStandby">
-      <h1 class="standby-title">AWS Students Builder</h1>
+      <h1 class="standby-title">AWS Students Builder Group</h1>
       <p class="standby-subtitle">
         Impulsando el futuro de la <b>Ingeniería de Software</b>, Cloud Computing e Inteligencia Artificial en el <b>CUUT · UAEMex</b>.
       </p>
@@ -380,7 +380,7 @@
 
   <!-- Bottom Details -->
   <footer class="bottom-info">
-    <div>UAEMex · Centro Universitario UAEM Texcoco</div>
+    <div>UAEMex · Centro Universitario UAEM Tianguistenco</div>
     <div>AWS Students Community · 2026</div>
   </footer>
 </div>
