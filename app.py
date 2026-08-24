@@ -37,7 +37,7 @@ app.secret_key = os.environ.get("SECRET_KEY", "cambia-esta-clave-en-produccion")
 
 # async_mode="threading": sin eventlet/gevent, corre sobre el mismo servidor.
 # Suficiente para una pantalla; para muchos clientes tocaría un worker async.
-socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Contraseña del panel de admin (cámbiala con la variable de entorno)
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "abejas2026")
@@ -330,10 +330,4 @@ if __name__ == "__main__":
     # 8000 y no 8080: ese puerto lo suelen ocupar Tomcat, XAMPP o Jenkins.
     # Para usar otro:  PORT=5050 python app.py
     puerto = int(os.environ.get("PORT", 8000))
-
-    # allow_unsafe_werkzeug: usamos el server de Werkzeug a propósito (expo,
-    # una pantalla). Para producción real, un worker async + gunicorn.
-    # use_reloader: detecta cambios en .py y templates y reinicia solo.
-    socketio.run(app, host="0.0.0.0", port=puerto,
-                 debug=True, use_reloader=True,
-                 allow_unsafe_werkzeug=True)
+    socketio.run(app, host="127.0.0.1", port=8000)
