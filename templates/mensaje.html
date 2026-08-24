@@ -20,7 +20,7 @@
     gap: 22px;
     padding: 28px 18px;
     font-family: "Segoe UI", Arial, sans-serif;
-    background: linear-gradient(180deg, #91710b 0%, #136808 100%);
+    background: linear-gradient(180deg, #000000 0%, #020594 100%);
     color: #fff;
     text-align: center;
   }
@@ -110,14 +110,7 @@
 
   <!-- Caballo: primero respirando, luego pastando (en bucle) -->
   <div class="caballo" id="caballo">
-    <video id="video-respirando" class="activo"
-           src="{{ url_for('static', filename='caballo-respirando.webm') }}"
-           muted playsinline preload="auto" disablepictureinpicture
-           aria-label="Caballo respirando"></video>
-    <video id="video-pastando"
-           src="{{ url_for('static', filename='caballo-pastando.webm') }}"
-           muted playsinline preload="auto" disablepictureinpicture
-           aria-label="Caballo pastando"></video>
+    <img src="/static/imgmsj.png" alt="Caballo" style="width: 300px; height: 100%; object-fit: contain;">
   </div>
 
   <div id="aviso" class="aviso"></div>
