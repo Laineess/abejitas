@@ -16,12 +16,22 @@ API pública (la que consume app.py):
     solo_texto(texto)      -> str          sin emojis ni símbolos
 """
 
+import logging
+import os
 import re
+import threading
 import unicodedata
+import urllib.error
+import urllib.request
 
-from better_profanity import profanity  # 4ª capa: palabrotas en inglés
+from better_profanity import profanity  # Capa de respaldo para inglés
 
 profanity.load_censor_words()
+
+_logger = logging.getLogger(__name__)
+_detoxify_model = None
+_detoxify_lock = threading.Lock()
+DETOXIFY_UMBRAL = float(os.environ.get("DETOXIFY_UMBRAL", "0.65"))
 
 # ----------------------------------------------------------------- capa 1
 # Raíces: se bloquea cualquier palabra que EMPIECE con ellas.
@@ -29,7 +39,7 @@ profanity.load_censor_words()
 # bloquearía "vergüenza"; no "mens" porque bloquearía "mensaje").
 RAICES = [
     # español — groserías y sexuales
-    "put", "pendej", "ching", "verga", "vergaz", "verguiz", "vrga",
+    "put", "pendej", "ching", "verga", "vergaz", "verguiz", "verguis", "vrga",
     "mierd", "miard", "cabron", "culer", "culo", "caga", "cago", "cague",
     "mamad", "mamon", "mames", "mamast", "chupam", "chupal",
     "joto", "jotol", "jotit", "maric", "pito", "pija", "pijud",
@@ -74,7 +84,7 @@ FRASES = [
 # una expresión denigrante. Por separado son palabras legítimas.
 GRUPOS = [
     "judio", "judia", "gay", "lesbian", "homosexual", "trans", "travesti",
-    "indigen", "migrant", "inmigrant", "musulman", "gitan", "sudaca",
+    "indigen", "migrant", "inmigrant", "extranjer", "musulman", "gitan", "sudaca",
     "discapacitad", "negro", "negra", "chino", "china", "boliviano",
     "peruano", "haitiano", "venezolano", "mexicano",
 ]
@@ -90,11 +100,11 @@ FRASES_DENIGRANTES = [
     "son una plaga", "que se mueran",
 ]
 
-# Sustitución "leet"/fonética para evasiones: put0 -> puto, pv7a -> puta.
+# Sustitución "leet"/fonética para evasiones: put0 -> puto, p3nd3jo -> pendejo, 8oludo -> boludo.
 _MAPA_LEET = str.maketrans({
-    "0": "o", "1": "i", "3": "e", "4": "a", "5": "s",
-    "7": "t", "@": "a", "$": "s", "!": "i", "+": "t",
-    "k": "c", "v": "u", "z": "s",
+    "0": "o", "1": "i", "2": "z", "3": "e", "4": "a", "5": "s",
+    "6": "g", "7": "t", "8": "b", "9": "g", "@": "a", "$": "s",
+    "!": "i", "+": "t", "k": "c",
 })
 
 
@@ -146,13 +156,33 @@ def _normalizar(texto: str) -> str:
 
 
 def _variantes(texto: str):
-    """Formas normalizadas del texto para atrapar evasiones."""
+    """Formas normalizadas del texto para atrapar evasiones (leet, símbolos, repetidas)."""
     base = _sin_acentos(_asegurar_texto(texto).lower())
     leet = base.translate(_MAPA_LEET)
+
+    # 1. Limpiar símbolos y separadores dejando espacios ("p.u.t.o" -> "p u t o")
+    limpio_espacios = re.sub(r"[\W_]+", " ", leet)
+
+    # 2. Unir letras sueltas consecutivas ("p u t o" -> "puto", "h o l a" -> "hola")
+    palabras_unidas = re.sub(r"(?<=\b\w)\s+(?=\w\b)", "", limpio_espacios)
+
+    # 3. Colapsar repeticiones exageradas de letras ("puuuuutoooo" -> "puto", "chiiiingaaa" -> "chinga")
+    sin_repetidas = re.sub(r"(.)\1+", r"\1", leet)
+    sin_repetidas_unidas = re.sub(r"(.)\1+", r"\1", palabras_unidas)
+
+    # 4. Todo pegado sin ningún separador ("p-u-t-0" -> "putoelquelolea")
+    todo_pegado = re.sub(r"[\W_]+", "", leet)
+    todo_pegado_sin_rep = re.sub(r"(.)\1+", r"\1", todo_pegado)
+
     formas = {
-        base,                    # original en minúsculas sin acentos
-        leet,                    # con sustitución leet/fonética
-        leet.replace(" ", ""),   # "p u t o" -> "puto"
+        base,
+        leet,
+        limpio_espacios,
+        palabras_unidas,
+        sin_repetidas,
+        sin_repetidas_unidas,
+        todo_pegado,
+        todo_pegado_sin_rep,
     }
     return [f for f in formas if f.strip()]
 
@@ -162,6 +192,30 @@ def _contiene_frase(texto: str, frases):
     for frase in frases:
         if frase and frase in texto:
             return frase
+    return None
+
+
+def _detectar_con_detoxify(texto: str):
+    """Devuelve una etiqueta si Detoxify considera tóxico el texto."""
+    global _detoxify_model
+    if _detoxify_model is None:
+        with _detoxify_lock:
+            if _detoxify_model is None:
+                try:
+                    from detoxify import Detoxify
+                    _detoxify_model = Detoxify("multilingual", device="cpu")
+                except Exception as error:
+                    _logger.warning("No se pudo cargar Detoxify: %s", error)
+                    _detoxify_model = False
+    if not _detoxify_model:
+        return None
+
+    try:
+        resultado = _detoxify_model.predict(texto)
+        if resultado.get("toxicity", 0) >= DETOXIFY_UMBRAL:
+            return "detoxify (toxicidad >= %.2f)" % DETOXIFY_UMBRAL
+    except Exception as error:
+        _logger.warning("Falló la moderación con Detoxify: %s", error)
     return None
 
 
@@ -184,10 +238,49 @@ _FRASES_NORM = [_normalizar(f) for f in FRASES]
 _FRASES_DENIGRANTES_NORM = [_normalizar(f) for f in FRASES_DENIGRANTES]
 
 
+# ------------------------------------------------------------- IA / OpenAI
+
+def moderar_con_openai(texto: str, timeout: float = 1.5) -> tuple[bool, str | None]:
+    """Consulta la API de Moderación de OpenAI (omni-moderation-latest).
+
+    Retorna:
+        (aprobado: bool, razon_bloqueo: str | None)
+    
+    En caso de error 429, timeout o fallo de red, se aplica fallback seguro
+    permitiendo continuar sin interrumpir el servicio.
+    """
+    if not OPENAI_API_KEY or not texto.strip():
+        return True, None
+
+    url = "https://api.openai.com/v1/moderations"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {OPENAI_API_KEY.strip()}",
+    }
+    payload = json.dumps({"input": texto, "model": "omni-moderation-latest"}).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            results = data.get("results", [])
+            if results and results[0].get("flagged", False):
+                categorias = [k for k, v in results[0].get("categories", {}).items() if v]
+                categoria_str = ", ".join(categorias) if categorias else "openai_flagged"
+                return False, f"openai ({categoria_str})"
+    except urllib.error.HTTPError as e:
+        logger.debug("OpenAI Moderation HTTPError %d: %s (aplicando fallback local)", e.code, e.reason)
+    except Exception as e:
+        logger.debug("OpenAI Moderation error: %s (aplicando fallback local)", e)
+
+    return True, None
+
+
 # ------------------------------------------------------------- API pública
 
 def buscar_groseria(texto: str):
     """Devuelve la palabra ofensiva detectada, o None si el texto es limpio."""
+    # 1. Filtro local ultra-rápido (< 1ms)
     for variante in _variantes(texto):
         m = _RE_RAICES.search(variante)
         if m:
@@ -207,12 +300,11 @@ def buscar_groseria(texto: str):
             frase_d = _contiene_frase(variante, _FRASES_DENIGRANTES_NORM)
             if frase_d:
                 return f"discurso de odio ({g.group(1)} + {frase_d})"
-    # Última capa: better-profanity sobre el texto en minúsculas y sin acentos.
-    # No se le pasa la variante leet a propósito: el mapa convierte k -> c, lo
-    # que rompería palabras inglesas del corpus ("jerk" -> "jerc").
+
+    # 2. better-profanity sobre el texto en minúsculas y sin acentos
     if profanity.contains_profanity(_sin_acentos(_asegurar_texto(texto).lower())):
         return "profanity"
-    return None
+    return _detectar_con_detoxify(texto)
 
 
 def es_limpio(texto: str) -> bool:

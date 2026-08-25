@@ -3,3 +3,7 @@ flask-socketio>=5.3
 simple-websocket>=1.0
 qrcode[pil]>=7.4
 better-profanity>=0.7
+detoxify>=0.5.2
+torch>=2.0
+transformers>=4.13
+sentencepiece>=0.1.94
