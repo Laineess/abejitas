@@ -43,7 +43,8 @@ RAICES = [
     # español — insultos
     "estupid", "imbecil", "idiot", "tarad", "babos", "zopenc",
     "mongol", "retrasad", "subnormal", "machorr", "lenchon", "invertid",
-    "patarajad", "mugros", "zarrapastros", "escori",
+    "patarajad", "mugros", "zarrapastros", "escori", "naco", "menso",
+    "sidos",
     # inglés
     "fuck", "fuk", "fck", "fucc", "shit", "bitch", "asshole", "ashole",
     "motherfuck", "mothafuck", "cunt", "nigg", "fagg", "whore", "slut",
@@ -58,6 +59,7 @@ EXACTAS = [
     "sexo", "semen", "pene", "vagina", "teta", "tetas", "chichis",
     "zorra", "zorras", "perra", "perras", "coger", "cojer", "nepe",
     "csm", "ctm", "qliao", "wtf", "stfu",
+    "gei", "geis",  # variante fonética de "gay" usada como insulto
 ]
 
 # ----------------------------------------------------------------- capa 3
