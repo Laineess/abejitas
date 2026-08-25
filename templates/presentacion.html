@@ -46,7 +46,7 @@
 
   /* Canvas de ondas digitales y partículas */
   #waveCanvas {
-    position: absolute;
+    position: fixed;
     inset: 0;
     width: 100%;
     height: 100%;
@@ -56,11 +56,22 @@
 
   /* Viñeta cinematográfica */
   .vignette {
-    position: absolute;
+    position: fixed;
     inset: 0;
     background: radial-gradient(circle at 40% 40%, transparent 45%, rgba(8, 12, 21, 0.65) 100%);
     z-index: 2;
     pointer-events: none;
+  }
+
+  .dim-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    pointer-events: none;
+    will-change: opacity;
   }
 
   /* Contenedor principal UI */
@@ -77,6 +88,107 @@
 
   .ui-container * {
     pointer-events: auto;
+  }
+
+  /* ──────────────── SCROLL & CAROUSEL ──────────────── */
+  #scrollWrapper {
+    width: 100%;
+    height: 100vh;
+    overflow-y: hidden;
+    scroll-snap-type: y mandatory;
+    scroll-behavior: smooth;
+    position: relative;
+    z-index: 10;
+    will-change: scroll-position;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+
+  #scrollWrapper::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+  }
+
+  .snap-section {
+    width: 100%;
+    height: 100vh;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    position: relative;
+  }
+
+  #carouselSection {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .carousel-track-wrapper {
+    width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    position: relative;
+  }
+
+  .carousel-track {
+    display: inline-flex;
+    gap: 20px;
+    animation: marquee 29.5s linear infinite;
+    will-change: transform;
+  }
+
+  .carousel-track img {
+    height: 400px;
+    width: auto;
+    border-radius: 12px;
+    object-fit: cover;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    transform: translateZ(0);
+  }
+
+  @keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  .carousel-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: clamp(54px, 7vw, 92px);
+    font-weight: 900;
+    text-align: center;
+    z-index: 15;
+    display: none;
+    letter-spacing: 2px;
+    
+    /* Efecto Liquid Glass (cristal líquido animado) */
+    color: transparent;
+    background: linear-gradient(
+      -45deg, 
+      rgba(255,255,255,0.1) 0%, 
+      rgba(255,255,255,0.9) 35%, 
+      rgba(150, 220, 255, 0.7) 50%, 
+      rgba(255,255,255,0.9) 65%, 
+      rgba(255,255,255,0.1) 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    
+    /* Animación lenta como pidió el usuario (8s) */
+    animation: liquidShine 8s ease-in-out infinite alternate;
+    
+    /* El filtro SVG nos da el contorno perfecto sin intersecciones, y el drop-shadow da la profundidad */
+    filter: url(#glass-text-filter) 
+            drop-shadow(0 15px 25px rgba(0,0,0,0.6)) 
+            drop-shadow(0 4px 10px rgba(135, 206, 235, 0.5));
+  }
+
+  @keyframes liquidShine {
+    0% { background-position: 0% center; }
+    100% { background-position: 200% center; }
   }
 
   /* ──────────────── TOP NAVBAR ──────────────── */
@@ -333,56 +445,85 @@
 </head>
 <body>
 
+<svg width="0" height="0" style="position: absolute; pointer-events: none;">
+  <filter id="glass-text-filter" x="-20%" y="-20%" width="140%" height="140%">
+    <!-- 1. Borde exterior (dilatamos y coloreamos) -->
+    <feMorphology in="SourceAlpha" operator="dilate" radius="1.5" result="dilated" />
+    <feFlood flood-color="rgba(255,255,255,0.7)" result="whiteFlood" />
+    <feComposite in="whiteFlood" in2="dilated" operator="in" result="strokeFull" />
+    
+    <!-- 2. Hacemos el borde hueco cortándole el centro (SourceAlpha) -->
+    <feComposite in="strokeFull" in2="SourceAlpha" operator="out" result="strokeHollow" />
+    
+    <!-- 3. Juntamos borde hueco y relleno animado (SourceGraphic original del CSS) -->
+    <feMerge>
+      <feMergeNode in="strokeHollow" />
+      <feMergeNode in="SourceGraphic" />
+    </feMerge>
+  </filter>
+</svg>
 <canvas id="waveCanvas"></canvas>
 <div class="vignette"></div>
+<div class="dim-overlay" id="dimOverlay"></div>
 
-<div class="ui-container">
-  <!-- Top Bar -->
-  <header class="top-navbar">
-    <div class="brand-group">
-      <img class="logo-aws" src="{{ url_for('static', filename='aws-logo.png') }}" alt="AWS" onerror="this.style.display='none'">
-      <div class="brand-divider"></div>
-      <div class="brand-text-block">
-        <div class="brand-title">AWS Students Builder Group</div>
-        <div class="brand-subtitle">CUUT · UAEMex</div>
-      </div>
-    </div>
-    <img class="logo-uaem" src="{{ url_for('static', filename='uaem-logo.png') }}" alt="UAEMex" onerror="this.style.display='none'">
-  </header>
-
-  <!-- Main Hero Area -->
-  <div class="hero-wrapper">
-    <!-- Presenter View (con foco total en el Tema) -->
-    <main class="hero-content" id="heroPresenter" style="display: none;">
-      <!-- 1. TEMA PRINCIPAL -->
-      <div class="topic-block">
-        <h1 class="tema-title anim-out" id="pTema">Beneficios</h1>
-      </div>
-
-      <!-- 2. IDENTIDAD DEL PONENTE -->
-      <div class="speaker-identity anim-out" id="speakerCard">
-        <div class="speaker-header">
-          <div class="speaker-name" id="pNombre">Balam Carranza</div>
-          <div class="speaker-role" id="pRol">Director de Eventos</div>
+<div id="scrollWrapper">
+  <section class="snap-section">
+    <div class="ui-container">
+      <!-- Top Bar -->
+      <header class="top-navbar">
+        <div class="brand-group">
+          <img class="logo-aws" src="{{ url_for('static', filename='aws-logo.png') }}" alt="AWS" onerror="this.style.display='none'">
+          <div class="brand-divider"></div>
+          <div class="brand-text-block">
+            <div class="brand-title">AWS Students Builder Group</div>
+            <div class="brand-subtitle">CUUT · UAEMex</div>
+          </div>
         </div>
-        <div class="speaker-socials" id="pSocials"></div>
+        <img class="logo-uaem" src="{{ url_for('static', filename='uaem-logo.png') }}" alt="UAEMex" onerror="this.style.display='none'">
+      </header>
+
+      <!-- Main Hero Area -->
+      <div class="hero-wrapper">
+        <!-- Presenter View (con foco total en el Tema) -->
+        <main class="hero-content" id="heroPresenter" style="display: none;">
+          <!-- 1. TEMA PRINCIPAL -->
+          <div class="topic-block">
+            <h1 class="tema-title anim-out" id="pTema">Beneficios</h1>
+          </div>
+
+          <!-- 2. IDENTIDAD DEL PONENTE -->
+          <div class="speaker-identity anim-out" id="speakerCard">
+            <div class="speaker-header">
+              <div class="speaker-name" id="pNombre">Balam Carranza</div>
+              <div class="speaker-role" id="pRol">Director de Eventos</div>
+            </div>
+            <div class="speaker-socials" id="pSocials"></div>
+          </div>
+        </main>
+
+        <!-- Standby Mode (cuando no hay ponente activo) -->
+        <main class="standby-content anim-out" id="heroStandby">
+          <h1 class="standby-title">AWS Students Builder Group</h1>
+          <p class="standby-subtitle">
+            Impulsando el futuro de la <b>Ingeniería de Software</b>, Cloud Computing e Inteligencia Artificial en el <b>CUUT · UAEMex</b>.
+          </p>
+        </main>
       </div>
-    </main>
 
-    <!-- Standby Mode (cuando no hay ponente activo) -->
-    <main class="standby-content anim-out" id="heroStandby">
-      <h1 class="standby-title">AWS Students Builder Group</h1>
-      <p class="standby-subtitle">
-        Impulsando el futuro de la <b>Ingeniería de Software</b>, Cloud Computing e Inteligencia Artificial en el <b>CUUT · UAEMex</b>.
-      </p>
-    </main>
-  </div>
+      <!-- Bottom Details -->
+      <footer class="bottom-info">
+        <div>UAEMex · Centro Universitario UAEM Tianguistenco</div>
+        <div>AWS Students Community · 2026</div>
+      </footer>
+    </div>
+  </section>
 
-  <!-- Bottom Details -->
-  <footer class="bottom-info">
-    <div>UAEMex · Centro Universitario UAEM Tianguistenco</div>
-    <div>AWS Students Community · 2026</div>
-  </footer>
+  <section class="snap-section" id="carouselSection">
+    <div class="carousel-track-wrapper">
+      <div class="carousel-track" id="carouselTrack"></div>
+    </div>
+    <div class="carousel-text" id="carouselText"></div>
+  </section>
 </div>
 
 <script>
@@ -627,6 +768,33 @@
       pSocials.innerHTML = socialsHtml;
       pSocials.style.display = socialsHtml ? "flex" : "none";
 
+      const carouselSection = document.getElementById("carouselSection");
+      const carouselTrack = document.getElementById("carouselTrack");
+      const carouselText = document.getElementById("carouselText");
+      const scrollWrapper = document.getElementById("scrollWrapper");
+
+      if (p.imagenes && p.imagenes.length > 0) {
+        let imgHtml = "";
+        const imgs = [...p.imagenes, ...p.imagenes];
+        imgs.forEach(src => {
+          imgHtml += `<img src="${src}" alt="Presentación" onerror="this.style.display='none'">`;
+        });
+        carouselTrack.innerHTML = imgHtml;
+        
+        if (p.carrusel_texto) {
+          carouselText.textContent = p.carrusel_texto;
+          carouselText.style.display = "block";
+        } else {
+          carouselText.style.display = "none";
+        }
+        carouselSection.style.display = "flex";
+        scrollWrapper.style.overflowY = "auto";
+      } else {
+        carouselSection.style.display = "none";
+        scrollWrapper.style.overflowY = "hidden";
+        scrollWrapper.scrollTo({ top: 0 });
+      }
+
       // Entrada en cascada con blur y scale
       requestAnimationFrame(() => {
         pTema.classList.remove("anim-out");
@@ -644,6 +812,23 @@
     .then(r => r.json())
     .then(d => updatePresenter(d.ponente))
     .catch(() => updatePresenter(null));
+
+  // IntersectionObserver para oscurecer el fondo cuando el carrusel es visible
+  const dimOverlay = document.getElementById("dimOverlay");
+  const carouselSec = document.getElementById("carouselSection");
+  
+  if (carouselSec && dimOverlay) {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          dimOverlay.style.opacity = "1";
+        } else {
+          dimOverlay.style.opacity = "0";
+        }
+      });
+    }, { threshold: 0.3 });
+    observer.observe(carouselSec);
+  }
 })();
 </script>
 </body>

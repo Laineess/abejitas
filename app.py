@@ -20,10 +20,13 @@ import qrcode
 from flask import (Flask, jsonify, redirect, render_template, request,
                    send_file, session, url_for)
 from flask_socketio import SocketIO
+from werkzeug.utils import secure_filename
 
 from moderacion import buscar_groseria, solo_texto
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 COOLDOWN = 10
 MAX_CARACTERES = 100
@@ -268,8 +271,17 @@ def admin_agregar_ponente():
         "tema":      (request.form.get("tema") or "").strip(),
         "instagram": (request.form.get("instagram") or "").strip().lstrip("@"),
         "linkedin":  (request.form.get("linkedin") or "").strip(),
+        "carrusel_texto": (request.form.get("carrusel_texto") or "").strip(),
+        "imagenes": []
     }
     if ponente["nombre"]:
+        archivos = request.files.getlist("imagenes")
+        archivos_validos = [f for f in archivos if f.filename]
+        if 3 <= len(archivos_validos) <= 5:
+            for f in archivos_validos:
+                filename = f"{int(time.time())}_{secure_filename(f.filename)}"
+                f.save(os.path.join(UPLOAD_FOLDER, filename))
+                ponente["imagenes"].append(url_for("static", filename=f"uploads/{filename}"))
         with _lock:
             _ponentes.append(ponente)
             _guardar_ponentes(_ponentes, _ponente_activo)
