@@ -1,5 +1,6 @@
-# -*- coding: utf-8 -*-
-"""Suite exhaustiva de pruebas para el sistema de moderación de mensajes.
+# Check del filtro de mensajes:  python test_moderacion.py
+import moderacion
+from moderacion import buscar_groseria, es_limpio, solo_texto
 
 Ejecución:  ./venv/bin/python test_moderacion.py
 """
@@ -133,3 +134,21 @@ print(" [7/7] Resiliencia de OpenAI Moderation API validada.")
 
 print("\n🎉 ¡TODAS LAS PRUEBAS (50+ verificaciones) PASARON EXITOSAMENTE!")
 
+
+# --- Detoxify: umbral y salida sin descargar el modelo real ---
+class ModeloDetoxifyFalso:
+    def __init__(self, toxicidad):
+        self.toxicidad = toxicidad
+
+    def predict(self, texto):
+        return {"toxicity": self.toxicidad}
+
+
+moderacion._detoxify_model = ModeloDetoxifyFalso(0.9)
+assert buscar_groseria("comentario contextual") == (
+    "detoxify (toxicidad >= 0.65)"
+)
+moderacion._detoxify_model = ModeloDetoxifyFalso(0.2)
+assert es_limpio("comentario contextual"), "falso positivo de Detoxify"
+
+print("ok — solo_texto, limpios, groserías y 4ª capa")
