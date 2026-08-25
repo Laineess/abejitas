@@ -159,8 +159,8 @@ def recibir_mensaje():
         _ultimo_envio[ip] = ahora            # el intento también consume cooldown
         app.logger.warning("Mensaje rechazado de %s (palabra: %s)", ip, groseria)
         return jsonify(ok=False, error="groseria",
-                       mensaje="⚠️ Tu mensaje contiene lenguaje ofensivo y no será "
-                               "mostrado. Recuerda ser respetuoso. 🐝"), 400
+                       mensaje="Tu mensaje contiene lenguaje ofensivo y no será "
+                               "mostrado. Recuerda ser respetuoso."), 400
 
     _ultimo_envio[ip] = ahora
     mensaje = guardar_mensaje(texto)
@@ -168,7 +168,7 @@ def recibir_mensaje():
     if flag("mostrar_mensajes"):
         socketio.emit("mensaje", mensaje)
     return jsonify(ok=True,
-                   mensaje="¡Gracias! Una abejita llevará tu mensaje a la pantalla. 🐝"), 201
+                   mensaje="¡Gracias! Tu mensaje será llevado a la pantalla."), 201
 
 
 @app.route("/api/estado")
