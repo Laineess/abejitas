@@ -39,4 +39,13 @@ assert buscar_groseria("comentario contextual") == (
 moderacion._detoxify_model = ModeloDetoxifyFalso(0.2)
 assert es_limpio("comentario contextual"), "falso positivo de Detoxify"
 
-print("ok — solo_texto, limpios, groserías y 4ª capa")
+# --- ampliación del diccionario: "gei" y nuevas raíces (naco, menso, sidos) ---
+for mal in ["gei", "geis", "eres un gei", "naco", "que naco eres",
+            "menso", "no seas menso", "sidos", "eres un sidoso"]:
+    assert buscar_groseria(mal), f"no detectó (ampliación): {mal!r}"
+
+# "gei" es palabra EXACTA, no raíz: no debe atrapar palabras que empiezan igual
+for ok in ["geiser en Islandia", "geisha japonesa"]:
+    assert es_limpio(ok), f"falso positivo por 'gei': {ok!r}"
+
+print("ok — solo_texto, limpios, groserías, 4ª capa y ampliación del diccionario")
