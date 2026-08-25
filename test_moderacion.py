@@ -1,4 +1,5 @@
 # Check del filtro de mensajes:  python test_moderacion.py
+import moderacion
 from moderacion import buscar_groseria, es_limpio, solo_texto
 
 # --- solo_texto: quita emojis/símbolos, conserva texto real ---
@@ -20,5 +21,22 @@ for mal in ["pendejo", "p3nd3jo", "p u t o", "no mames", "hijo de puta"]:
 # --- 4ª capa (better-profanity): cobertura que el filtro previo no tenía ---
 for mal in ["you are a jerk", "what a prick", "arsehole", "tosser"]:
     assert buscar_groseria(mal), f"better-profanity no detectó: {mal!r}"
+
+
+# --- Detoxify: umbral y salida sin descargar el modelo real ---
+class ModeloDetoxifyFalso:
+    def __init__(self, toxicidad):
+        self.toxicidad = toxicidad
+
+    def predict(self, texto):
+        return {"toxicity": self.toxicidad}
+
+
+moderacion._detoxify_model = ModeloDetoxifyFalso(0.9)
+assert buscar_groseria("comentario contextual") == (
+    "detoxify (toxicidad >= 0.65)"
+)
+moderacion._detoxify_model = ModeloDetoxifyFalso(0.2)
+assert es_limpio("comentario contextual"), "falso positivo de Detoxify"
 
 print("ok — solo_texto, limpios, groserías y 4ª capa")

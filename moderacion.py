@@ -16,12 +16,20 @@ API pública (la que consume app.py):
     solo_texto(texto)      -> str          sin emojis ni símbolos
 """
 
+import logging
+import os
 import re
+import threading
 import unicodedata
 
 from better_profanity import profanity  # 4ª capa: palabrotas en inglés
 
 profanity.load_censor_words()
+
+_logger = logging.getLogger(__name__)
+_detoxify_model = None
+_detoxify_lock = threading.Lock()
+DETOXIFY_UMBRAL = float(os.environ.get("DETOXIFY_UMBRAL", "0.65"))
 
 # ----------------------------------------------------------------- capa 1
 # Raíces: se bloquea cualquier palabra que EMPIECE con ellas.
@@ -165,6 +173,30 @@ def _contiene_frase(texto: str, frases):
     return None
 
 
+def _detectar_con_detoxify(texto: str):
+    """Devuelve una etiqueta si Detoxify considera tóxico el texto."""
+    global _detoxify_model
+    if _detoxify_model is None:
+        with _detoxify_lock:
+            if _detoxify_model is None:
+                try:
+                    from detoxify import Detoxify
+                    _detoxify_model = Detoxify("multilingual", device="cpu")
+                except Exception as error:
+                    _logger.warning("No se pudo cargar Detoxify: %s", error)
+                    _detoxify_model = False
+    if not _detoxify_model:
+        return None
+
+    try:
+        resultado = _detoxify_model.predict(texto)
+        if resultado.get("toxicity", 0) >= DETOXIFY_UMBRAL:
+            return "detoxify (toxicidad >= %.2f)" % DETOXIFY_UMBRAL
+    except Exception as error:
+        _logger.warning("Falló la moderación con Detoxify: %s", error)
+    return None
+
+
 # ------------------------------------------------------- expresiones regulares
 # Se compilan una sola vez al importar. Las raíces se ordenan de más larga a
 # más corta para que el grupo capturado sea la coincidencia más específica.
@@ -212,7 +244,7 @@ def buscar_groseria(texto: str):
     # que rompería palabras inglesas del corpus ("jerk" -> "jerc").
     if profanity.contains_profanity(_sin_acentos(_asegurar_texto(texto).lower())):
         return "profanity"
-    return None
+    return _detectar_con_detoxify(texto)
 
 
 def es_limpio(texto: str) -> bool:
