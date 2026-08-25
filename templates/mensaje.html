@@ -2,582 +2,181 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Déjanos un mensaje — AWS Students Builder Group UAEMex</title>
-
-<!-- Fuentes Montserrat vendorizadas locales -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Déjanos un mensaje — AWS Students Builder Group</title>
 <style>
-  @font-face {
-    font-family: "Montserrat"; font-weight: 400; font-display: swap;
-    src: url("{{ url_for('static', filename='montserrat-400.woff2') }}") format("woff2");
-  }
-  @font-face {
-    font-family: "Montserrat"; font-weight: 600; font-display: swap;
-    src: url("{{ url_for('static', filename='montserrat-600.woff2') }}") format("woff2");
-  }
-  @font-face {
-    font-family: "Montserrat"; font-weight: 800; font-display: swap;
-    src: url("{{ url_for('static', filename='montserrat-800.woff2') }}") format("woff2");
-  }
-
   :root {
-    --fuente: "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --bg-dark: #070b14;
-    --aws-navy: #161e2d;
+    --aws-navy: #232f3e;
     --aws-orange: #ff9900;
-    --aws-orange-glow: rgba(255, 153, 0, 0.4);
-    --uaemex-green: #0b6e4f;
-    --uaemex-gold: #d4af37;
-    --accent-cyan: #38bdf8;
-    --text-main: #ffffff;
-    --text-muted: #94a3b8;
-    --card-bg: rgba(22, 30, 45, 0.72);
-    --card-border: rgba(255, 255, 255, 0.12);
+    --miel: #ffc93c;
   }
-
-  * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  html, body {
-    min-height: 100vh;
-    width: 100%;
-    font-family: var(--fuente);
-    background-color: var(--bg-dark);
-    color: var(--text-main);
-    overflow-x: hidden;
-  }
-
+  * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 16px;
-    position: relative;
-    background:
-      radial-gradient(ellipse at 80% 15%, rgba(56, 189, 248, 0.14) 0%, transparent 50%),
-      radial-gradient(ellipse at 20% 85%, rgba(255, 153, 0, 0.12) 0%, transparent 55%),
-      radial-gradient(ellipse at 50% 50%, rgba(11, 110, 79, 0.08) 0%, transparent 60%),
-      var(--bg-dark);
-  }
-
-  /* Patrón hexagonal sutil de panal en el fondo */
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='41.6' height='72' viewBox='0 0 41.6 72'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='0.03' stroke-width='1.5'%3E%3Cpath d='M0 -24 L20.8 -12 L20.8 12 L0 24 L-20.8 12 L-20.8 -12 Z M41.6 -24 L62.4 -12 L62.4 12 L41.6 24 L20.8 12 L20.8 -12 Z M20.8 12 L41.6 24 L41.6 48 L20.8 60 L0 48 L0 24 Z M0 48 L20.8 60 L20.8 84 L0 96 L-20.8 84 L-20.8 60 Z M41.6 48 L62.4 60 L62.4 84 L41.6 96 L20.8 84 L20.8 60 Z'/%3E%3C/g%3E%3C/svg%3E");
-    background-size: 41.6px 72px;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  /* Contenedor principal responsive */
-  .app-container {
-    width: 100%;
-    max-width: 880px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    z-index: 10;
-    margin: auto 0;
-  }
-
-  /* Top Bar con Logos */
-  .header-brand {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    max-width: 840px;
-    padding: 0 8px 4px;
-  }
-
-  .brand-logos {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-
-  .brand-logos img {
-    height: 38px;
-    width: auto;
-    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5));
-  }
-
-  .brand-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(255, 153, 0, 0.12);
-    border: 1px solid rgba(255, 153, 0, 0.35);
-    padding: 5px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--aws-orange);
-    letter-spacing: 0.3px;
-  }
-
-  .badge-dot {
-    width: 7px;
-    height: 7px;
-    background: #10b981;
-    border-radius: 50%;
-    box-shadow: 0 0 8px #10b981;
-    animation: pulso 2s infinite;
-  }
-
-  @keyframes pulso {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.3); opacity: 0.6; }
-  }
-
-  /* Tarjeta Glassmorphic Principal */
-  .main-card {
-    width: 100%;
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border-radius: 24px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    overflow: hidden;
-    display: grid;
-    grid-template-columns: 1fr;
-    transition: transform 0.3s ease;
-  }
-
-  @media (min-width: 768px) {
-    .main-card {
-      grid-template-columns: 320px 1fr;
-    }
-  }
-
-  /* Panel Izquierdo: Mascota y bienvenida */
-  .hero-panel {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(0, 0, 0, 0.25) 100%);
-    border-bottom: 1px solid var(--card-border);
-    padding: 24px 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    gap: 22px;
+    padding: 28px 18px;
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: linear-gradient(180deg, #000000 0%, #020594 100%);
+    color: #fff;
     text-align: center;
+  }
+  h1 { font-size: 26px; }
+  h1 span { color: var(--aws-orange); }
+
+  /* --------- animación del caballo (respirando → pastando) --------- */
+  /* Los dos clips son verticales 9:16 y llevan canal alfa: el fondo de la
+     página se ve a través, sin tarjeta ni recuadro. Los navegadores que no
+     soportan alfa en VP9 muestran el color base incrustado (#243145), que es
+     el mismo tono del degradado a esa altura. */
+  .caballo {
     position: relative;
-  }
-
-  @media (min-width: 768px) {
-    .hero-panel {
-      border-bottom: none;
-      border-right: 1px solid var(--card-border);
-      padding: 36px 24px;
-    }
-  }
-
-  .mascot-box {
-    position: relative;
-    width: 130px;
-    height: 150px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 10px;
-  }
-
-  @media (min-width: 768px) {
-    .mascot-box {
-      width: 180px;
-      height: 200px;
-      margin-bottom: 16px;
-    }
-  }
-
-  .mascot-aura {
-    position: absolute;
-    width: 110px;
-    height: 110px;
-    background: radial-gradient(circle, rgba(56, 189, 248, 0.35) 0%, rgba(255, 153, 0, 0.15) 60%, transparent 80%);
-    border-radius: 50%;
-    filter: blur(16px);
-    z-index: 1;
-    animation: flotarAura 3.5s ease-in-out infinite alternate;
-  }
-
-  .mascot-img {
-    position: relative;
-    z-index: 2;
+    height: min(50vh, 420px);
+    aspect-ratio: 9 / 16;
     max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    image-rendering: pixelated;
-    animation: flotarPotro 3.5s ease-in-out infinite alternate;
-    filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.6));
   }
-
-  @keyframes flotarPotro {
-    0% { transform: translateY(0px) rotate(0deg); }
-    50% { transform: translateY(-7px) rotate(1.2deg); }
-    100% { transform: translateY(-12px) rotate(-1deg); }
-  }
-
-  @keyframes flotarAura {
-    0% { transform: scale(0.9); opacity: 0.6; }
-    100% { transform: scale(1.15); opacity: 0.9; }
-  }
-
-  .hero-panel h1 {
-    font-size: 20px;
-    font-weight: 800;
-    line-height: 1.25;
-    margin-bottom: 6px;
-  }
-
-  @media (min-width: 768px) {
-    .hero-panel h1 {
-      font-size: 22px;
-    }
-  }
-
-  .hero-panel h1 span {
-    color: var(--aws-orange);
-    background: linear-gradient(90deg, #ff9900, #ffc93c);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .hero-desc {
-    font-size: 13px;
-    color: var(--text-muted);
-    line-height: 1.4;
-  }
-
-  .screen-badge {
-    margin-top: 12px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 5px 12px;
-    border-radius: 12px;
-    font-size: 11.5px;
-    color: #cbd5e1;
-  }
-
-  /* Panel Derecho: Formulario Interactivo */
-  .form-panel {
-    padding: 22px 20px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 16px;
-  }
-
-  @media (min-width: 768px) {
-    .form-panel {
-      padding: 32px 30px;
-      gap: 20px;
-    }
-  }
-
-  /* Mensajes de Alerta / Estado */
-  .aviso {
+  .caballo video {
+    position: absolute;
+    inset: 0;
     width: 100%;
-    border-radius: 14px;
-    padding: 12px 16px;
-    font-size: 14px;
-    font-weight: 600;
-    display: none;
-    align-items: center;
-    gap: 10px;
-    animation: fadeIn 0.3s ease;
+    height: 100%;
+    object-fit: contain;   /* nunca recorta al caballo */
+    opacity: 0;
+    transition: opacity .35s ease;
   }
+  .caballo video.activo { opacity: 1; }
 
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-6px); }
-    to { opacity: 1; transform: translateY(0); }
+  /* --------- formulario --------- */
+  form {
+    width: 100%;
+    max-width: 420px;
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 18px;
+    padding: 22px;
+    backdrop-filter: blur(6px);
   }
-
-  .aviso.ok {
-    display: flex;
-    background: rgba(16, 185, 129, 0.15);
-    color: #a7f3d0;
-    border: 1px solid rgba(16, 185, 129, 0.35);
-  }
-
-  .aviso.error {
-    display: flex;
-    background: rgba(239, 68, 68, 0.15);
-    color: #fecaca;
-    border: 1px solid rgba(239, 68, 68, 0.35);
-  }
-
-  /* Textarea estilizado */
-  .input-group {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .label-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-  }
-
-  .label-title {
-    font-size: 13.5px;
-    font-weight: 600;
-    color: #cbd5e1;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .textarea-wrapper {
-    position: relative;
-    border-radius: 16px;
-    background: rgba(15, 23, 42, 0.6);
-    border: 1.5px solid rgba(255, 255, 255, 0.12);
-    transition: all 0.25s ease;
-    overflow: hidden;
-  }
-
-  .textarea-wrapper:focus-within {
-    border-color: var(--aws-orange);
-    box-shadow: 0 0 0 3px rgba(255, 153, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.35);
-    background: rgba(15, 23, 42, 0.85);
-  }
-
   textarea {
     width: 100%;
-    height: 108px;
+    height: 96px;
     resize: none;
-    border: none;
+    border: 2px solid transparent;
+    border-radius: 12px;
+    padding: 12px;
+    font-size: 17px;
+    font-family: inherit;
     outline: none;
-    background: transparent;
-    padding: 14px 16px;
-    font-size: 15.5px;
-    font-family: inherit;
-    color: #ffffff;
-    line-height: 1.45;
+    background: #fffbe9;
+    color: var(--aws-navy);
   }
-
-  textarea::placeholder {
-    color: rgba(255, 255, 255, 0.35);
-    font-size: 14.5px;
-  }
-
-  .textarea-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 6px 14px 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    font-size: 12.5px;
-    color: var(--text-muted);
-  }
-
-  .char-counter {
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    transition: color 0.2s ease;
-  }
-
-  .char-counter.warning { color: #f59e0b; }
-  .char-counter.danger { color: #ef4444; font-weight: 800; }
-
-  .kb-hint {
-    display: none;
-    font-size: 11.5px;
-    color: rgba(255, 255, 255, 0.35);
-  }
-
-  @media (min-width: 768px) {
-    .kb-hint { display: inline-block; }
-  }
-
-  /* Botón Principal */
-  .btn-submit {
+  textarea:focus { border-color: var(--aws-orange); }
+  .contador { margin: 8px 0 14px; font-size: 14px; color: #9fb0c3; text-align: right; }
+  .contador.limite { color: #ff7b72; font-weight: 700; }
+  button {
     width: 100%;
-    padding: 15px;
+    padding: 14px;
     border: none;
-    border-radius: 14px;
-    background: linear-gradient(135deg, #ff9900 0%, #ff8000 100%);
-    color: #111827;
-    font-family: inherit;
-    font-size: 16.5px;
+    border-radius: 12px;
+    background: var(--aws-orange);
+    color: var(--aws-navy);
+    font-size: 18px;
     font-weight: 800;
-    letter-spacing: 0.3px;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    box-shadow: 0 6px 20px rgba(255, 153, 0, 0.35);
-    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform .1s, opacity .2s;
   }
+  button:active { transform: scale(.98); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
 
-  .btn-submit:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 28px rgba(255, 153, 0, 0.5);
-    background: linear-gradient(135deg, #ffa726 0%, #ff9100 100%);
-  }
-
-  .btn-submit:active:not(:disabled) {
-    transform: translateY(0) scale(0.98);
-  }
-
-  .btn-submit:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    box-shadow: none;
-    background: #475569;
-    color: #94a3b8;
-  }
-
-  /* Spinner animado */
-  .spinner {
-    width: 18px;
-    height: 18px;
-    border: 2.5px solid rgba(17, 24, 39, 0.3);
-    border-top-color: #111827;
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
+  .aviso {
+    max-width: 420px;
+    width: 100%;
+    border-radius: 12px;
+    padding: 13px 16px;
+    font-size: 15.5px;
+    font-weight: 600;
     display: none;
   }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  /* Footer */
-  .footer-bar {
-    text-align: center;
-    font-size: 12px;
-    color: #64748b;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    padding-top: 4px;
-  }
-
-  .footer-bar b {
-    color: var(--uaemex-gold);
-  }
+  .aviso.ok    { display: block; background: #10432e; color: #7ee2b8; border: 1px solid #1d7a54; }
+  .aviso.error { display: block; background: #4a1d1d; color: #ffb4ad; border: 1px solid #8a3232; }
+  footer { font-size: 13px; color: #8296ac; }
 </style>
 </head>
 <body>
 
-<div class="app-container">
+  <h1>¡Hola! Somos <span>AWS Students Builder Group UAEMex</span></h1>
 
-  <!-- Header con logos de AWS y UAEMex -->
-  <header class="header-brand">
-    <div class="brand-logos">
-      <img src="{{ url_for('static', filename='aws-logo.png') }}" alt="AWS" onerror="this.style.display='none'">
-      <img src="{{ url_for('static', filename='uaem-logo.png') }}" alt="UAEMex" onerror="this.style.display='none'">
-    </div>
-  </header>
+  <!-- Caballo: primero respirando, luego pastando (en bucle) -->
+  <div class="caballo" id="caballo">
+    <img src="/static/imgmsj.png" alt="Caballo" style="width: 300px; height: 100%; object-fit: contain;">
+  </div>
 
-  <!-- Tarjeta Glassmorphic -->
-  <main class="main-card">
-    
-    <!-- Hero / Mascota -->
-    <section class="hero-panel">
-      <div class="mascot-box">
-        <div class="mascot-aura"></div>
-        <img class="mascot-img" src="{{ url_for('static', filename='imgmsj.png') }}" alt="Mascota AWS UAEMex">
-      </div>
-      <h1>AWS Students <span>Builder Group</span></h1>
-      <p class="hero-desc">CU UAEM Tianguistenco</p>
-      <div class="screen-badge">
-        <span>Tu mensaje aparecerá en la pantalla grande</span>
-      </div>
-    </section>
+  <div id="aviso" class="aviso"></div>
 
-    <!-- Formulario -->
-    <section class="form-panel">
-      
-      <div id="aviso" class="aviso" role="alert"></div>
+  <form id="formulario">
+    <textarea id="texto" maxlength="{{ max_caracteres }}"
+              placeholder="Escribe tu mensaje aquí… aparecerá en la pantalla 🖥️"></textarea>
+    <div class="contador"><span id="cuenta">0</span>/{{ max_caracteres }}</div>
+    <button id="boton" type="submit">Enviar mensaje 🐝</button>
+  </form>
 
-      <form id="formulario">
-        <div class="input-group">
-          <div class="label-header">
-            <label class="label-title" for="texto">
-              <span>Escribe tu mensaje</span>
-            </label>
-          </div>
-
-          <div class="textarea-wrapper">
-            <textarea id="texto"
-                      maxlength="{{ max_caracteres }}"
-                      placeholder="Deja un saludo, pregunta o felicitación a los ponentes…"
-                      autocomplete="off"
-                      spellcheck="true"
-                      required></textarea>
-            
-            <div class="textarea-footer">
-              <span class="kb-hint">Presiona <b>Ctrl+Enter</b> para enviar</span>
-              <span class="char-counter"><span id="cuenta">0</span>/{{ max_caracteres }}</span>
-            </div>
-          </div>
-        </div>
-
-        <button id="boton" class="btn-submit" type="submit" style="margin-top: 18px;">
-          <span class="spinner" id="spinner"></span>
-          <span id="btn-text">Enviar a la pantalla</span>
-        </button>
-      </form>
-
-    </section>
-  </main>
-
-  <footer class="footer-bar">
-    AWS Students Builder Group · <b>CU · UAEMex</b> · Tianguistenco
-  </footer>
-
-</div>
+  <footer>AWS Students Builder · CU · UAEMex · Tianguistenco</footer>
 
 <script>
+// --------- animación del caballo: respirando → pastando → repetir ---------
+(() => {
+  const clips = [
+    document.getElementById("video-respirando"),
+    document.getElementById("video-pastando"),
+  ];
+  if (clips.some(v => !v)) return;
+
+  let actual = 0;
+
+  function reproducir(indice) {
+    actual = indice;
+    clips.forEach((v, i) => {
+      v.classList.toggle("activo", i === indice);
+      if (i !== indice) v.pause();
+    });
+    const video = clips[indice];
+    video.currentTime = 0;
+    const promesa = video.play();
+    if (promesa) promesa.catch(() => {});
+  }
+
+  clips.forEach((video, i) => {
+    video.addEventListener("ended", () => reproducir((i + 1) % clips.length));
+  });
+
+  reproducir(0);
+
+  // Si el navegador bloquea el autoplay, arrancamos con la primera interacción.
+  document.addEventListener("pointerdown", () => {
+    if (clips[actual].paused) reproducir(actual);
+  }, { once: true });
+
+  // Pausamos mientras la pestaña está oculta para no gastar batería.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) clips[actual].pause();
+    else { const p = clips[actual].play(); if (p) p.catch(() => {}); }
+  });
+})();
+
 (() => {
   const MAX = {{ max_caracteres }};
   const form = document.getElementById("formulario");
   const texto = document.getElementById("texto");
   const cuenta = document.getElementById("cuenta");
   const boton = document.getElementById("boton");
-  const btnText = document.getElementById("btn-text");
-  const spinner = document.getElementById("spinner");
   const aviso = document.getElementById("aviso");
   let temporizador = null;
 
-  // Actualizar contador y estilos de alerta al escribir
-  function actualizarContador() {
-    const len = texto.value.length;
-    cuenta.textContent = len;
-    cuenta.parentElement.classList.remove("warning", "danger");
-    if (len >= MAX) {
-      cuenta.parentElement.classList.add("danger");
-    } else if (len >= MAX * 0.8) {
-      cuenta.parentElement.classList.add("warning");
-    }
-  }
-
-  texto.addEventListener("input", actualizarContador);
-
-  // Atajo Ctrl+Enter / Cmd+Enter
-  texto.addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-      e.preventDefault();
-      if (!boton.disabled && texto.value.trim()) {
-        form.dispatchEvent(new Event("submit", { cancelable: true }));
-      }
-    }
+  texto.addEventListener("input", () => {
+    cuenta.textContent = texto.value.length;
+    cuenta.parentElement.classList.toggle("limite", texto.value.length >= MAX);
   });
 
   function mostrarAviso(msj, tipo) {
@@ -585,74 +184,50 @@
     aviso.className = "aviso " + tipo;
   }
 
-  function ocultarAviso() {
-    aviso.style.display = "none";
-    aviso.className = "aviso";
-  }
-
   function iniciarCooldown(segundos) {
     clearInterval(temporizador);
     let restante = segundos;
     boton.disabled = true;
-    spinner.style.display = "none";
-    btnText.textContent = `Espera ${restante} s para otro mensaje…`;
-
+    boton.textContent = `Espera ${restante} s…`;
     temporizador = setInterval(() => {
       restante--;
       if (restante <= 0) {
         clearInterval(temporizador);
         boton.disabled = false;
-        btnText.textContent = "Enviar a la pantalla";
+        boton.textContent = "Enviar mensaje 🐝";
       } else {
-        btnText.textContent = `Espera ${restante} s para otro mensaje…`;
+        boton.textContent = `Espera ${restante} s…`;
       }
     }, 1000);
   }
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const contenido = texto.value.trim();
-    if (!contenido) return;
-
     boton.disabled = true;
-    spinner.style.display = "inline-block";
-    btnText.textContent = "Enviando mensaje...";
-    ocultarAviso();
-
     try {
       const r = await fetch("/api/mensaje", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto: contenido }),
+        body: JSON.stringify({ texto: texto.value }),
       });
       const datos = await r.json();
-
       if (r.ok) {
-        // Vibración háptica en móviles si está soportado
-        if (navigator.vibrate) navigator.vibrate([30, 40, 30]);
-
-        mostrarAviso(datos.mensaje || "¡Gracias! Tu mensaje llegará a la pantalla.", "ok");
+        mostrarAviso(datos.mensaje, "ok");
         texto.value = "";
-        actualizarContador();
+        cuenta.textContent = "0";
         iniciarCooldown(10);
       } else if (r.status === 429) {
         mostrarAviso(datos.mensaje, "error");
         iniciarCooldown(datos.restante || 10);
       } else {
         mostrarAviso(datos.mensaje, "error");
-        if (datos.error === "groseria") {
-          iniciarCooldown(10);
-        } else {
-          boton.disabled = false;
-          spinner.style.display = "none";
-          btnText.textContent = "Enviar a la pantalla";
-        }
+        // Groserías también consumen cooldown
+        if (datos.error === "groseria") iniciarCooldown(10);
+        else boton.disabled = false;
       }
     } catch {
-      mostrarAviso("No se pudo conectar con el servidor. Revisa tu conexión.", "error");
+      mostrarAviso("No se pudo enviar. Revisa tu conexión e intenta de nuevo.", "error");
       boton.disabled = false;
-      spinner.style.display = "none";
-      btnText.textContent = "Enviar a la pantalla";
     }
   });
 })();
