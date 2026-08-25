@@ -131,8 +131,8 @@
         <summary style="cursor:pointer; color:#fbbf24; font-weight:600; font-size:14px; margin-bottom:10px;">
           ＋ Agregar ponente
         </summary>
-        <form method="post" action="{{ url_for('admin_agregar_ponente') }}"
-              style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
+        <form id="form-agregar-ponente" method="post" action="{{ url_for('admin_agregar_ponente') }}" enctype="multipart/form-data"
+              style="display:flex; flex-direction:column; gap:8px; margin-top:10px;" onsubmit="return validarFormulario(this)">
           <input type="text" name="nombre" placeholder="Nombre *" required
                  style="padding:10px; border-radius:8px; border:none; font-size:15px;">
           <input type="text" name="rol" placeholder="Rol (ej: Director de Eventos)"
@@ -143,8 +143,24 @@
                  style="padding:10px; border-radius:8px; border:none; font-size:15px;">
           <input type="text" name="linkedin" placeholder="LinkedIn (ej: balam-carranza)"
                  style="padding:10px; border-radius:8px; border:none; font-size:15px;">
+          <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 6px 0;">
+          <label style="font-size: 13px; color: #7d8fa5;">Imágenes opcionales para carrusel (3 a 5):</label>
+          <input type="file" name="imagenes" multiple accept="image/*" id="input-imagenes"
+                 style="font-size: 14px; color: #cdd6e0;">
+          <input type="text" name="carrusel_texto" placeholder="Texto centrado en el carrusel (opcional)"
+                 style="padding:10px; border-radius:8px; border:none; font-size:15px;">
           <button type="submit" style="align-self:flex-end;">Agregar</button>
         </form>
+        <script>
+          function validarFormulario(form) {
+            const files = form.querySelector('#input-imagenes').files;
+            if (files.length > 0 && (files.length < 3 || files.length > 5)) {
+              alert("Si decides agregar imágenes, deben ser mínimo 3 y máximo 5.");
+              return false;
+            }
+            return true;
+          }
+        </script>
       </details>
 
       {% if ponentes %}
