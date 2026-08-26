@@ -528,7 +528,7 @@
         <img class="mascot-img" src="{{ url_for('static', filename='imgmsj.png') }}" alt="Mascota AWS UAEMex">
       </div>
       <h1>AWS Students <span>Builder Group</span></h1>
-      <p class="hero-desc">CU UAEM Tianguistenco</p>
+      <p class="hero-desc">CUT UAEM Tianguistenco</p>
       <div class="screen-badge">
         <span>Tu mensaje aparecerá en la pantalla grande</span>
       </div>
@@ -576,6 +576,7 @@
             <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
           </svg>
           No se aceptan mensajes ofensivos, groserías ni discurso de odio.
+          Solo se permiten letras (sin acentos ni números).
         </p>
       </form>
 
@@ -583,7 +584,7 @@
   </main>
 
   <footer class="footer-bar">
-    AWS Students Builder Group · <b>CU · UAEMex</b> · Tianguistenco
+    AWS Students Builder Group · <b>CUT · UAEMex</b> · Tianguistenco
   </footer>
 
 </div>
@@ -621,7 +622,15 @@
     }
   }
 
-  texto.addEventListener("input", actualizarContador);
+  // Regex: solo letras (sin acentos), ñ/Ñ y espacios
+  const REGEX_VALIDO = /^[a-zA-ZñÑ\s]*$/;
+  const REGEX_INVALIDO = /[^a-zA-ZñÑ\s]/g;
+
+  // Filtra en tiempo real caracteres no permitidos
+  texto.addEventListener("input", () => {
+    texto.value = texto.value.replace(REGEX_INVALIDO, "");
+    actualizarContador();
+  });
 
   // Atajo Ctrl+Enter / Cmd+Enter
   texto.addEventListener("keydown", (e) => {

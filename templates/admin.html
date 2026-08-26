@@ -96,6 +96,20 @@
 
     <div class="tarjeta estado">
       <div>
+        Pantalla en el Proyector:
+        <span class="badge {{ 'on' if mostrar_abejas else 'off' }}">
+          {{ 'ABEJAS' if mostrar_abejas else 'PONENTES' }}
+        </span>
+      </div>
+      <form method="post" action="{{ url_for('admin_toggle', clave='mostrar_abejas') }}">
+        <button type="submit" class="{{ 'rojo' if mostrar_abejas else '' }}">
+          {{ 'Ver Ponentes' if mostrar_abejas else 'Ver Abejas' }}
+        </button>
+      </form>
+    </div>
+
+    <div class="tarjeta estado">
+      <div>
         Modo prueba:
         <small style="color:#7d8fa5;">envía mensajes simultáneos a la pantalla</small>
       </div>
@@ -144,7 +158,7 @@
           <input type="text" name="linkedin" placeholder="LinkedIn (ej: balam-carranza)"
                  style="padding:10px; border-radius:8px; border:none; font-size:15px;">
           <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 6px 0;">
-          <label style="font-size: 13px; color: #7d8fa5;">Imágenes opcionales para carrusel (3 a 5):</label>
+          <label style="font-size: 13px; color: #7d8fa5;">Imágenes opcionales para carrusel (3 a 6):</label>
           <input type="file" name="imagenes" multiple accept="image/*" id="input-imagenes"
                  style="font-size: 14px; color: #cdd6e0;">
           <input type="text" name="carrusel_texto" placeholder="Texto centrado en el carrusel (opcional)"
@@ -154,8 +168,32 @@
         <script>
           function validarFormulario(form) {
             const files = form.querySelector('#input-imagenes').files;
-            if (files.length > 0 && (files.length < 3 || files.length > 5)) {
-              alert("Si decides agregar imágenes, deben ser mínimo 3 y máximo 5.");
+            if (files.length > 0 && (files.length < 3 || files.length > 6)) {
+              alert("Si decides agregar imágenes, deben ser mínimo 3 y máximo 6.");
+              return false;
+            }
+            return true;
+          }
+        </script>
+      </details>
+
+      <details style="margin-bottom:14px;">
+        <summary style="cursor:pointer; color:#fbbf24; font-weight:600; font-size:14px; margin-bottom:10px;">
+          + Agregar imágenes (1 a 2)
+        </summary>
+        <form id="form-agregar-imagenes" method="post" action="{{ url_for('admin_agregar_imagenes') }}" enctype="multipart/form-data"
+              style="display:flex; flex-direction:column; gap:8px; margin-top:10px;" onsubmit="return validarFormImagenes(this)">
+          <input type="text" name="titulo" placeholder="Título *" required
+                 style="padding:10px; border-radius:8px; border:none; font-size:15px;">
+          <input type="file" name="imagenes" multiple accept="image/*" id="input-imagenes-slides" required
+                 style="font-size: 14px; color: #cdd6e0;">
+          <button type="submit" style="align-self:flex-end;">Agregar</button>
+        </form>
+        <script>
+          function validarFormImagenes(form) {
+            const files = form.querySelector('#input-imagenes-slides').files;
+            if (files.length < 1 || files.length > 2) {
+              alert("Debes seleccionar 1 o 2 imágenes máximo.");
               return false;
             }
             return true;
@@ -169,10 +207,16 @@
             <li style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
               <div style="flex:1; min-width:0;">
                 <strong{% if loop.index0 == ponente_activo %} style="color:#7ee2b8;"{% endif %}>
-                  {{ p.nombre }}
+                  {% if p.tipo == 'imagenes' %}
+                    Imágenes: {{ p.titulo }}
+                  {% else %}
+                    {{ p.nombre }}
+                  {% endif %}
                 </strong>
-                {% if p.rol %}<small> — {{ p.rol }}</small>{% endif %}
-                {% if p.tema %}<br><small style="color:#fbbf24;">🎤 {{ p.tema }}</small>{% endif %}
+                {% if p.tipo != 'imagenes' %}
+                  {% if p.rol %}<small> — {{ p.rol }}</small>{% endif %}
+                  {% if p.tema %}<br><small style="color:#fbbf24;">⚡ {{ p.tema }}</small>{% endif %}
+                {% endif %}
               </div>
               <div style="display:flex; gap:6px; flex-shrink:0;">
                 {% if loop.index0 != ponente_activo %}
