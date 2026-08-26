@@ -20,6 +20,7 @@ import qrcode
 from flask import (Flask, jsonify, redirect, render_template, request,
                    send_file, session, url_for)
 from flask_socketio import SocketIO
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 from moderacion import buscar_groseria, solo_texto
@@ -31,9 +32,11 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 COOLDOWN = 10
 MAX_CARACTERES = 100
 MAX_RECIENTES = 50   # cuántos mensajes recientes se guardan en memoria
+MAX_TAMANO_SUBIDA = 50 * 1024 * 1024
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.config["MAX_CONTENT_LENGTH"] = MAX_TAMANO_SUBIDA
 # jsonify sin escapar acentos/emojis (respuesta UTF-8 legible)
 app.json.ensure_ascii = False
 app.secret_key = os.environ.get("SECRET_KEY", "cambia-esta-clave-en-produccion")
@@ -41,6 +44,11 @@ app.secret_key = os.environ.get("SECRET_KEY", "cambia-esta-clave-en-produccion")
 # async_mode="threading": sin eventlet/gevent, corre sobre el mismo servidor.
 # Suficiente para una pantalla; para muchos clientes tocaría un worker async.
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def solicitud_demasiado_grande(_error):
+    return ("La subida es demasiado grande. El límite total es de 50 MB.", 413)
 
 # Contraseña del panel de admin (cámbiala con la variable de entorno)
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "abejas2026")
