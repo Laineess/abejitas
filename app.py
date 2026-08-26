@@ -11,6 +11,7 @@ Unicode/UTF-8.
 import io
 import json
 import os
+import re
 import socket
 import threading
 import time
@@ -47,12 +48,12 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "abejas2026")
 
 # ------------------------------------------------------------- estado en memoria
 # Flags on/off del panel. Whitelist: solo estas claves se pueden alternar.
-FLAGS = {"mostrar_mensajes", "audio"}
+FLAGS = {"mostrar_mensajes", "audio", "mostrar_abejas"}
 
 _lock = threading.Lock()
 _mensajes = deque(maxlen=MAX_RECIENTES)   # recientes: {"id": int, "texto": str}
 _siguiente_id = 1
-_flags = {"mostrar_mensajes": True, "audio": True}
+_flags = {"mostrar_mensajes": True, "audio": True, "mostrar_abejas": False}
 _ultimo_envio = {}                         # cooldown: ip -> timestamp del último envío
 
 # --------------------------------------------------------- ponentes (persistidos)
@@ -139,6 +140,9 @@ def recibir_mensaje():
     datos = request.get_json(silent=True) or {}
     # Solo texto: se descartan emojis y símbolos antes de todo lo demás
     texto = solo_texto((datos.get("texto") or ""))
+    # Validación estricta: solo letras (a-z, A-Z, ñ, Ñ) y espacios
+    texto = re.sub(r'[^a-zA-ZñÑ\s]', '', texto).strip()
+    texto = re.sub(r'\s+', ' ', texto)
     ip = ip_cliente()
     ahora = time.time()
 
@@ -179,7 +183,7 @@ def estado():
     with _lock:
         ultimo_id = _mensajes[-1]["id"] if _mensajes else 0
     return jsonify(activado=flag("mostrar_mensajes"), audio=flag("audio"),
-                   ultimo_id=ultimo_id)
+                   mostrar_abejas=flag("mostrar_abejas"), ultimo_id=ultimo_id)
 
 
 @app.route("/api/nuevos")
@@ -220,7 +224,9 @@ def admin():
         recientes = list(_mensajes)[-20:][::-1]
     return render_template("admin.html", autenticado=True, error=None,
                            activado=flag("mostrar_mensajes"),
-                           audio=flag("audio"), mensajes=recientes,
+                           audio=flag("audio"),
+                           mostrar_abejas=flag("mostrar_abejas"),
+                           mensajes=recientes,
                            ponentes=_ponentes,
                            ponente_activo=_ponente_activo)
 
@@ -233,7 +239,8 @@ def admin_toggle(clave):
         set_flag(clave, not flag(clave))
         # Empuja el nuevo estado a la pantalla al instante (mensajes / audio)
         socketio.emit("config", {"activado": flag("mostrar_mensajes"),
-                                  "audio": flag("audio")})
+                                  "audio": flag("audio"),
+                                  "mostrar_abejas": flag("mostrar_abejas")})
     return redirect(url_for("admin"))
 
 
@@ -277,7 +284,7 @@ def admin_agregar_ponente():
     if ponente["nombre"]:
         archivos = request.files.getlist("imagenes")
         archivos_validos = [f for f in archivos if f.filename]
-        if 3 <= len(archivos_validos) <= 5:
+        if 3 <= len(archivos_validos) <= 6:
             for f in archivos_validos:
                 filename = f"{int(time.time())}_{secure_filename(f.filename)}"
                 f.save(os.path.join(UPLOAD_FOLDER, filename))
@@ -287,6 +294,32 @@ def admin_agregar_ponente():
             _guardar_ponentes(_ponentes, _ponente_activo)
     return redirect(url_for("admin"))
 
+
+@app.route("/admin/imagenes", methods=["POST"])
+def admin_agregar_imagenes():
+    global _ponentes, _ponente_activo
+    if not session.get("admin"):
+        return redirect(url_for("admin"))
+    
+    titulo = (request.form.get("titulo") or "").strip()
+    if titulo:
+        item = {
+            "tipo": "imagenes",
+            "titulo": titulo,
+            "imagenes": []
+        }
+        archivos = request.files.getlist("imagenes")
+        archivos_validos = [f for f in archivos if f.filename]
+        if 1 <= len(archivos_validos) <= 2:
+            for f in archivos_validos:
+                filename = f"{int(time.time())}_{secure_filename(f.filename)}"
+                f.save(os.path.join(UPLOAD_FOLDER, filename))
+                item["imagenes"].append(url_for("static", filename=f"uploads/{filename}"))
+            
+            with _lock:
+                _ponentes.append(item)
+                _guardar_ponentes(_ponentes, _ponente_activo)
+    return redirect(url_for("admin"))
 
 @app.route("/admin/ponentes/<int:idx>/activar", methods=["POST"])
 def admin_activar_ponente(idx):

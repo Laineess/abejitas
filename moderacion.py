@@ -29,7 +29,8 @@ profanity.load_censor_words()
 # bloquearía "vergüenza"; no "mens" porque bloquearía "mensaje").
 RAICES = [
     # español — groserías y sexuales
-    "put", "pendej", "ching", "verga", "vergaz", "verguiz", "vrga",
+    "put", "pvt", "put0", "pvt0", "puto", "puta",
+    "pendej", "ching", "verga", "vergaz", "verguiz", "vrga",
     "mierd", "miard", "cabron", "culer", "culo", "caga", "cago", "cague",
     "mamad", "mamon", "mames", "mamast", "chupam", "chupal",
     "joto", "jotol", "jotit", "maric", "pito", "pija", "pijud",
@@ -59,7 +60,11 @@ EXACTAS = [
     "sexo", "semen", "pene", "vagina", "teta", "tetas", "chichis",
     "zorra", "zorras", "perra", "perras", "coger", "cojer", "nepe",
     "csm", "ctm", "qliao", "wtf", "stfu",
-    "gei", "geis",  # variante fonética de "gay" usada como insulto
+    # variantes fonéticas de "gay" usadas como insulto
+    "gei", "geis", "gey", "geys", "guei", "guey", "gueis",
+    "geii", "geiii", "gaii", "gaiii",
+    # variantes de "pvto" como palabra completa
+    "pvto", "pvta", "pvtos", "pvtas", "pv7o", "pv7a",
 ]
 
 # ----------------------------------------------------------------- capa 3
