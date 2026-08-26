@@ -34,7 +34,9 @@ MAX_CARACTERES = 100
 MAX_RECIENTES = 50   # cuántos mensajes recientes se guardan en memoria
 
 app = Flask(__name__)
+app.config["SECRET_KEY"] = "super-secreto-cambiar-en-produccion"
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB de límite para subida de archivos
 # jsonify sin escapar acentos/emojis (respuesta UTF-8 legible)
 app.json.ensure_ascii = False
 app.secret_key = os.environ.get("SECRET_KEY", "cambia-esta-clave-en-produccion")
